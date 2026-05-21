@@ -1,0 +1,463 @@
+// =============================================================================
+// Veridict — PostgreSQL schema for reliability & verification tracking
+// =============================================================================
+// Scores are evidence-weighted signals — not declarations of objective truth.
+// Run: npx prisma migrate dev | npx prisma generate
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Category {
+  Politics
+  World
+  Business
+  Technology
+  Science
+  Health
+  Climate
+  Markets
+  Sports
+  Entertainment
+  General
+}
+
+enum Bias {
+  left
+  center_left @map("center-left")
+  center
+  center_right @map("center-right")
+  right
+  unknown
+}
+
+enum Verdict {
+  supported
+  disputed
+  unclear
+  insufficient_evidence
+}
+
+enum EvidenceStance {
+  support
+  contradict
+  neutral
+}
+
+enum ClaimKind {
+  factual
+  statistical
+  attribution
+  prediction
+  opinion
+  procedural
+}
+
+enum TrendDirection {
+  improving
+  stable
+  declining
+}
+
+enum ReliabilityCategoryId {
+  evidence_support
+  cross_source_corroboration
+  context_completeness
+  contradiction_detection
+  sensationalism
+  source_transparency
+}
+
+/// Polymorphic entity for historical_score_snapshots time-series.
+enum HistoricalEntityType {
+  article
+  source
+  author
+  topic
+  claim
+}
+
+/// Metric stored in a historical snapshot (supports confidence & contradiction history).
+enum HistoricalMetricType {
+  overall_score
+  rolling_average
+  confidence
+  contradiction_count
+  corroboration_rate
+  reporting_consistency
+  source_transparency
+  category_score
+}
+
+enum AnalysisRunStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
+enum ContentPolicy {
+  feed_summary_only
+  licensed_full_text
+  user_provided
+  metadata_only
+  licensed_excerpt
+}
+
+// ---------------------------------------------------------------------------
+// Core entities
+// ---------------------------------------------------------------------------
+
+/// Publisher / news organization (approved source registry).
+model Source {
+  id          String   @id @default(cuid())
+  /// Stable slug, e.g. "s1" or "reuters"
+  slug        String   @unique
+  name        String
+  domain      String   @unique
+  bias        Bias     @default(center)
+  reliability Int      @default(55) /// baseline 0-100, not objective truth
+  approved    Boolean  @default(true)
+  country     String?  @db.VarChar(2)
+  language    String?  @default("en") @db.VarChar(5)
+  foundedYear Int?
+  description String?  @db.Text
+  logoUrl     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  articles       Article[]
+  claimEvidence  ClaimEvidence[]
+  sourceScores   SourceScore[]
+
+  @@index([approved, domain])
+  @@map("sources")
+}
+
+model Author {
+  id          String  @id @default(cuid())
+  /// Normalized lookup key (hash of display name)
+  slug        String  @unique
+  displayName String
+  email       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  articles     Article[]
+  authorScores AuthorScore[]
+
+  @@index([displayName])
+  @@map("authors")
+}
+
+/// Group of articles covering the same underlying event.
+model StoryCluster {
+  id              String   @id @default(cuid())
+  title           String
+  summary         String   @db.Text
+  category        Category @default(General)
+  confidence      Int      @default(0)
+  disputedClaims  Int      @default(0) @map("disputed_claims")
+  missingContext  Int      @default(0) @map("missing_context")
+  trendingScore   Float    @default(0) @map("trending_score")
+  sourceDiversity Float?   @map("source_diversity")
+  publishedAt     DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  articles Article[]
+
+  @@index([category, publishedAt(sort: Desc)])
+  @@index([trendingScore(sort: Desc)])
+  @@map("story_clusters")
+}
+
+/// Normalized article record (manual URL, pasted text, or ingested feed).
+model Article {
+  id           String        @id @default(cuid())
+  /// Stable id from ingestion, e.g. art_xxx
+  externalId   String?       @unique @map("external_id")
+  url          String
+  canonicalUrl String        @unique @map("canonical_url")
+  title        String
+  summary      String?       @db.Text
+  contentHash  String?       @map("content_hash")
+  topic        Category      @default(General)
+  language     String        @default("en") @db.VarChar(5)
+  publishedAt  DateTime?     @map("published_at") @db.Timestamptz(6)
+  contentPolicy ContentPolicy? @map("content_policy")
+  rightsNote   String?       @map("rights_note") @db.Text
+
+  sourceId  String? @map("source_id")
+  authorId  String? @map("author_id")
+  clusterId String? @map("cluster_id")
+
+  /// Increment when article text/metadata changes and scores must be recomputed.
+  analysisVersion Int @default(1) @map("analysis_version")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  source       Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  author       Author?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  cluster      StoryCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  claims       Claim[]
+  analysisRuns AnalysisRun[]
+  scores       ArticleScore[]
+
+  @@index([sourceId, publishedAt(sort: Desc)])
+  @@index([authorId, publishedAt(sort: Desc)])
+  @@index([clusterId])
+  @@index([topic, updatedAt(sort: Desc)])
+  @@index([contentHash])
+  @@map("articles")
+}
+
+/// Verification run — links claims, evidence, and score versions for recalculation.
+model AnalysisRun {
+  id        String            @id @default(cuid())
+  articleId String            @map("article_id")
+  reportId  String?           @map("report_id")
+  status    AnalysisRunStatus @default(queued)
+  progress  Int               @default(0)
+  error     String?           @db.Text
+  startedAt DateTime?         @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime?       @map("completed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  article      Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  claims       Claim[]
+  articleScore ArticleScore?
+
+  @@index([articleId, createdAt(sort: Desc)])
+  @@index([reportId])
+  @@map("analysis_runs")
+}
+
+/// Extracted verifiable claim (never scores the whole article as true/false).
+model Claim {
+  id             String    @id @default(cuid())
+  articleId      String    @map("article_id")
+  analysisRunId  String?   @map("analysis_run_id")
+  externalId     String    @map("external_id")
+  text           String    @db.Text
+  kind           ClaimKind @default(factual)
+  verifiable     Boolean   @default(true)
+  verdict        Verdict   @default(insufficient_evidence)
+  confidence     Int       @default(0) /// 0-100 corroboration confidence
+  reasoning      String?   @db.Text
+  contextNote    String?   @map("context_note") @db.Text
+  /// Version within article — bumps when claim set is recomputed.
+  version        Int       @default(1)
+  isCurrent      Boolean   @default(true) @map("is_current")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+  evidence  ClaimEvidence[]
+
+  @@unique([articleId, externalId])
+  @@index([articleId, isCurrent])
+  @@index([analysisRunId])
+  @@index([verdict])
+  @@map("claims")
+}
+
+/// Cited passage tying a claim to an approved source (required for conclusions).
+model ClaimEvidence {
+  id            String         @id @default(cuid())
+  claimId       String         @map("claim_id")
+  sourceId      String         @map("source_id")
+  externalId    String         @map("external_id")
+  excerpt       String         @db.Text
+  stance        EvidenceStance
+  url           String
+  publishedAt   DateTime?      @map("published_at") @db.Timestamptz(6)
+  isDirectQuote Boolean        @default(false) @map("is_direct_quote")
+  citationLabel String?        @map("citation_label")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  claim  Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([claimId, externalId])
+  @@index([claimId, stance])
+  @@index([sourceId])
+  @@map("claim_evidence")
+}
+
+// ---------------------------------------------------------------------------
+// Reliability scores (versioned; is_current = latest for rolling queries)
+// ---------------------------------------------------------------------------
+
+model ArticleScore {
+  id            String  @id @default(cuid())
+  articleId     String  @map("article_id")
+  analysisRunId String? @unique @map("analysis_run_id")
+  version       Int
+  isCurrent     Boolean @default(true) @map("is_current")
+  reportId      String? @map("report_id")
+
+  overallScore   Int @map("overall_score")
+  rollingAverage Int? @map("rolling_average")
+  trendDirection TrendDirection? @map("trend_direction")
+  sampleSize     Int @default(1) @map("sample_size")
+
+  evidenceSupport            Int @map("evidence_support")
+  crossSourceCorroboration   Int @map("cross_source_corroboration")
+  contextCompleteness        Int @map("context_completeness")
+  contradictionDetection     Int @map("contradiction_detection")
+  sensationalism             Int
+  sourceTransparency         Int @map("source_transparency")
+
+  /// Full category breakdown + weights for audit/replay.
+  categoriesJson Json @map("categories_json")
+
+  contradictionCount Int @default(0) @map("contradiction_count")
+  missingContextCount Int @default(0) @map("missing_context_count")
+  avgClaimConfidence Float? @map("avg_claim_confidence")
+
+  computedAt   DateTime  @default(now()) @map("computed_at") @db.Timestamptz(6)
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  article     Article      @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+  snapshots   HistoricalScoreSnapshot[]
+
+  @@unique([articleId, version])
+  @@index([articleId, isCurrent])
+  @@index([computedAt(sort: Desc)])
+  @@index([overallScore])
+  @@map("article_scores")
+}
+
+model SourceScore {
+  id       String  @id @default(cuid())
+  sourceId String  @map("source_id")
+  topic    Category @default(General)
+  version  Int
+  isCurrent Boolean @default(true) @map("is_current")
+
+  overallScore           Int @map("overall_score")
+  rollingAverage         Int @map("rolling_average")
+  trendDirection         TrendDirection @map("trend_direction")
+  sampleSize             Int @default(1) @map("sample_size")
+  reportingConsistency   Int @map("reporting_consistency")
+  corroborationConfidence Int @map("corroboration_confidence")
+  sourceTransparency     Int @map("source_transparency")
+  contradictionFrequency Int @map("contradiction_frequency")
+  articlesScored         Int @default(0) @map("articles_scored")
+
+  triggeredByArticleId String? @map("triggered_by_article_id")
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, topic, version])
+  @@index([sourceId, topic, isCurrent])
+  @@index([computedAt(sort: Desc)])
+  @@map("source_scores")
+}
+
+model AuthorScore {
+  id       String  @id @default(cuid())
+  authorId String  @map("author_id")
+  topic    Category @default(General)
+  version  Int
+  isCurrent Boolean @default(true) @map("is_current")
+
+  overallScore           Int @map("overall_score")
+  rollingAverage         Int @map("rolling_average")
+  trendDirection         TrendDirection @map("trend_direction")
+  sampleSize             Int @default(1) @map("sample_size")
+  reportingConsistency   Int @map("reporting_consistency")
+  corroborationConfidence Int @map("corroboration_confidence")
+  articlesScored         Int @default(0) @map("articles_scored")
+
+  triggeredByArticleId String? @map("triggered_by_article_id")
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, topic, version])
+  @@index([authorId, topic, isCurrent])
+  @@index([computedAt(sort: Desc)])
+  @@map("author_scores")
+}
+
+model TopicScore {
+  id      String   @id @default(cuid())
+  topic   Category
+  version Int
+  isCurrent Boolean @default(true) @map("is_current")
+
+  overallScore   Int @map("overall_score")
+  rollingAverage Int @map("rolling_average")
+  trendDirection TrendDirection @map("trend_direction")
+  sampleSize     Int @default(1) @map("sample_size")
+  articlesScored Int @default(0) @map("articles_scored")
+
+  triggeredByArticleId String? @map("triggered_by_article_id")
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(6)
+
+  @@unique([topic, version])
+  @@index([topic, isCurrent])
+  @@index([computedAt(sort: Desc)])
+  @@map("topic_scores")
+}
+
+// ---------------------------------------------------------------------------
+// Time-series history (rolling averages, confidence, contradictions)
+// ---------------------------------------------------------------------------
+
+/// Append-only metric history for charts, trends, and recalculation audits.
+model HistoricalScoreSnapshot {
+  id         String               @id @default(cuid())
+  entityType HistoricalEntityType @map("entity_type")
+  /// CUID of article, source, author, claim, or topic enum string for topic entity.
+  entityId   String               @map("entity_id")
+  metricType HistoricalMetricType @map("metric_type")
+  /// For category_score metrics — maps to ReliabilityCategoryId.
+  metricKey  String?              @map("metric_key")
+  scoreValue Decimal              @map("score_value") @db.Decimal(6, 2)
+  sampleSize Int?                 @map("sample_size")
+  topic      Category?
+
+  /// Optional FK when snapshot was produced by a specific article score run.
+  articleScoreId String? @map("article_score_id")
+  reportId       String? @map("report_id")
+
+  /// Confidence history, contradiction details, cited evidence ids, etc.
+  metadata Json?
+
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  articleScore ArticleScore? @relation(fields: [articleScoreId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, recordedAt(sort: Desc)])
+  @@index([entityType, entityId, metricType, recordedAt(sort: Desc)])
+  @@index([topic, metricType, recordedAt(sort: Desc)])
+  @@index([articleScoreId])
+  @@map("historical_score_snapshots")
+}
