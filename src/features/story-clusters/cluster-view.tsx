@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink, GitCompare } from "lucide-react";
 import type { Cluster } from "@/lib/mock-data";
 import { claimsForCluster, sourceById, storiesForCluster } from "@/lib/mock-data";
 import { ConfidenceBar } from "@/components/confidence-bar";
+import { OSCAR } from "@/lib/brand";
 import { StatTile } from "@/components/stat-tile";
 import { ClaimPanel } from "@/features/claims/claim-panel";
 import { SourceBadge } from "@/features/sources/source-badge";
@@ -52,7 +53,7 @@ export function ClusterView({ cluster }: { cluster: Cluster }) {
                   params={{ clusterId: cluster.id }}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
                 >
-                  Consensus
+                  {OSCAR.consensus}
                 </Link>
                 <Link
                   to="/compare/$clusterId"

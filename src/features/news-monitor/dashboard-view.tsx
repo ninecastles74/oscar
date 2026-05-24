@@ -4,6 +4,7 @@ import { CLUSTERS, SOURCES } from "@/lib/mock-data";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { StatTile } from "@/components/stat-tile";
 import { SourceBadge } from "@/features/sources/source-badge";
+import { OSCAR } from "@/lib/brand";
 
 export function DashboardView() {
   const trending = [...CLUSTERS].sort((a, b) => b.trendingScore - a.trendingScore).slice(0, 6);
@@ -14,14 +15,14 @@ export function DashboardView() {
     <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="mb-8 flex items-end justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Dashboard</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.signals}</div>
           <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Newsroom overview</h1>
         </div>
         <Link
           to="/analyze"
           className="inline-flex items-center gap-2 rounded-md border bg-card px-4 py-2 text-sm font-semibold hover:bg-secondary"
         >
-          <FileSearch className="h-4 w-4" /> Analyze an article
+          <FileSearch className="h-4 w-4" /> {OSCAR.ask}
         </Link>
       </div>
 

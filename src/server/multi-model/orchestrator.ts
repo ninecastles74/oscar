@@ -208,8 +208,9 @@ export function applyMultiModelToReport(
 
 export async function enrichVerificationWithMultiModel(
   bundle: import("../analysis/verification/types").VerificationReportBundle,
+  trigger: "user" | "scheduled" = "user",
 ): Promise<import("../analysis/verification/types").VerificationReportBundle> {
-  if (!isMultiModelEnabled()) return bundle;
+  if (!isMultiModelEnabled(trigger)) return bundle;
 
   const multiModel = await runMultiModelVerification(bundle.results);
   const report = applyMultiModelToReport(bundle.report, multiModel);

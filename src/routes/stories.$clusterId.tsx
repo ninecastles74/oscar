@@ -1,9 +1,10 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { clusterById } from "@/lib/mock-data";
 import { ClusterView } from "@/features/story-clusters/cluster-view";
+import { pageTitle } from "@/lib/brand";
 
 export const Route = createFileRoute("/stories/$clusterId")({
-  head: ({ params }) => ({ meta: [{ title: `Cluster ${params.clusterId} — Veridict` }] }),
+  head: ({ params }) => ({ meta: [{ title: pageTitle(`Cluster ${params.clusterId}`) }] }),
   loader: ({ params }) => {
     const cluster = clusterById(params.clusterId);
     if (!cluster) throw notFound();

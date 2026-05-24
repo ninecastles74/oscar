@@ -13,7 +13,10 @@ export const REVIEW_VERDICTS: Verdict[] = ["disputed", "unclear", "insufficient_
 
 export const DISAGREEMENT_CONFIDENCE_SPREAD = 22;
 
-export function isMultiModelEnabled(): boolean {
+export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): boolean {
+  if (forTrigger === "scheduled" && process.env.SCHEDULED_USE_MULTI_MODEL === "false") {
+    return false;
+  }
   if (process.env.MULTI_MODEL_VERIFICATION_ENABLED === "false") return false;
   return (
     !!process.env.OPENAI_API_KEY?.trim() ||

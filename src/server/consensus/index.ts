@@ -4,6 +4,10 @@ export {
   runStoryConsensusFromArticles,
 } from "./analyze-cluster";
 export {
+  analyzeArticleHeavyweight,
+  runHeavyweightClusterAnalysis,
+} from "./analyze-cluster-heavyweight";
+export {
   saveStoryConsensus,
   getStoryConsensus,
   saveClusterArticles,

@@ -3,7 +3,9 @@ export type AnalysisErrorCode =
   | "URL_BLOCKED"
   | "URL_FETCH_FAILED"
   | "INSUFFICIENT_CONTENT"
-  | "PIPELINE_ERROR";
+  | "PIPELINE_ERROR"
+  | "QUOTA_EXCEEDED"
+  | "AUTH_REQUIRED";
 
 export class AnalysisError extends Error {
   readonly code: AnalysisErrorCode;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AnalysisExplainabilityBundle } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 import { ClickableScore } from "./clickable-score";
 import { ScoreExplainabilitySheet } from "./score-explainability-sheet";
 import type { ScoreExplainability } from "@/types/news-platform";
@@ -20,7 +21,7 @@ export function ReliabilityScoresPanel({
   return (
     <>
       <section className="rounded-xl border bg-card p-6">
-        <h2 className="font-serif text-2xl font-semibold">Reliability scores</h2>
+        <h2 className="font-serif text-2xl font-semibold">{OSCAR.reliability}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Evidence-weighted reliability — click any score for full transparency
         </p>

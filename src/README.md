@@ -1,7 +1,7 @@
-# Veridict — Project Structure
+# OSCAR — Project Structure
 
-AI news analysis platform built on TanStack Start (React 19, Vite 7).
-Mock-data only — no live APIs are wired yet.
+Observational Source Consensus & Analysis Review — built on TanStack Start (React 19, Vite 7).
+News ingestion, manual analysis, Supabase persistence, and reliability scoring are wired; some UI still uses mock fixtures.
 
 ## Folder map
 

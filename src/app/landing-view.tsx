@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Activity, ArrowRight, Layers, Quote, Scan, ShieldCheck } from "lucide-react";
+import { OscarLogo } from "@/components/oscar-logo";
+import { BRAND_NAME, OSCAR } from "@/lib/brand";
 
 export function LandingView() {
   return (
@@ -10,35 +12,37 @@ export function LandingView() {
         <div className="relative mx-auto max-w-7xl px-6 pb-24 pt-20 sm:pt-28">
           <div className="grid items-end gap-12 lg:grid-cols-[1.4fr_1fr]">
             <div>
+              <OscarLogo size="hero" priority className="mb-8" />
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" /> Live · 12,418 stories analyzed today
+                <span className="h-1.5 w-1.5 rounded-full bg-success" /> {OSCAR.intelligence} · Live
               </div>
               <h1 className="font-serif text-5xl font-semibold leading-[1.05] tracking-tight sm:text-7xl">
                 Read the news. <br />
-                <span className="text-muted-foreground">Verify the claims.</span>
+                <span className="text-muted-foreground">Trust the signals.</span>
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-                Veridict pulls the world's top stories, clusters duplicates, and runs AI claim analysis against
-                approved sources — surfacing confidence, dispute, and missing context for every story.
+                {BRAND_NAME} pulls the world&apos;s top stories, clusters duplicates, and runs{" "}
+                {OSCAR.analysis.toLowerCase()} against approved sources — surfacing confidence,
+                dispute, and missing context for every story.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
                   to="/dashboard"
                   className="inline-flex items-center gap-2 rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
                 >
-                  Open dashboard <ArrowRight className="h-4 w-4" />
+                  {OSCAR.signals} <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
                   to="/analyze"
                   className="inline-flex items-center gap-2 rounded-md border bg-card px-5 py-3 text-sm font-semibold transition-colors hover:bg-secondary"
                 >
-                  Analyze an article
+                  {OSCAR.ask}
                 </Link>
               </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
               <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                <span>Live cluster</span>
+                <span>{OSCAR.consensus}</span>
                 <span className="font-mono">cluster #c1</span>
               </div>
               <h3 className="mt-3 font-serif text-xl font-semibold leading-snug">
@@ -82,10 +86,10 @@ export function LandingView() {
         <div className="grid gap-6 md:grid-cols-2">
           <Link to="/stories" className="group rounded-2xl border bg-card p-8 transition-all hover:shadow-md">
             <Activity className="h-7 w-7 text-accent" />
-            <h3 className="mt-5 font-serif text-2xl font-semibold">Automatic News Monitor</h3>
+            <h3 className="mt-5 font-serif text-2xl font-semibold">{OSCAR.monitor}</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Continuously ingests the top 100 stories from major APIs, RSS, and approved publishers. Duplicates are
-              clustered, claims extracted, and cross-referenced in real time.
+              Continuously ingests the top 100 stories from major APIs, RSS, and approved publishers.
+              Duplicates are clustered, claims extracted, and cross-referenced in real time.
             </p>
             <ul className="mt-6 space-y-2 text-sm">
               {["Cross-source clustering", "Per-story confidence", "Disputed claim alerts", "Missing context detection"].map((x) => (
@@ -100,10 +104,10 @@ export function LandingView() {
           </Link>
           <Link to="/analyze" className="group rounded-2xl border bg-card p-8 transition-all hover:shadow-md">
             <Scan className="h-7 w-7 text-accent" />
-            <h3 className="mt-5 font-serif text-2xl font-semibold">Manual Article Analyzer</h3>
+            <h3 className="mt-5 font-serif text-2xl font-semibold">{OSCAR.ask}</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Paste a URL or article text. Veridict extracts claims, gathers evidence from approved sources,
-              and produces a full report with citations and a final confidence score.
+              Paste a URL or article text. {BRAND_NAME} extracts claims, gathers evidence from approved
+              sources, and delivers a full {OSCAR.analysis.toLowerCase()} report with citations and scores.
             </p>
             <ul className="mt-6 space-y-2 text-sm">
               {["Claim extraction", "Evidence with citations", "Bias & source comparison", "Exportable report"].map((x) => (
@@ -113,7 +117,7 @@ export function LandingView() {
               ))}
             </ul>
             <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-accent group-hover:underline">
-              Analyze an article <ArrowRight className="h-4 w-4" />
+              {OSCAR.ask} <ArrowRight className="h-4 w-4" />
             </span>
           </Link>
         </div>
@@ -125,7 +129,7 @@ export function LandingView() {
           <div className="grid gap-10 md:grid-cols-3">
             {[
               { Icon: Layers, t: "Cluster, don't duplicate", d: "Stories about the same event are merged into a single cluster with shared claims and source comparison." },
-              { Icon: ShieldCheck, t: "Provenance you can audit", d: "Every claim links to specific excerpts and URLs. Reliability and bias are visible per source." },
+              { Icon: ShieldCheck, t: OSCAR.verified, d: "Every claim links to specific excerpts and URLs. Reliability and bias are visible per source." },
               { Icon: Quote, t: "Context, not just verdicts", d: "Confidence bars show how much evidence backs a claim — and flag what's missing from the framing." },
             ].map(({ Icon, t, d }) => (
               <div key={t}>

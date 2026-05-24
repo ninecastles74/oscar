@@ -37,4 +37,5 @@ export {
   runClaimConsensusEngine,
 } from "../consensus-engine";
 export { CLAIM_CONSENSUS_DISCLAIMERS } from "@/types/news-platform";
+export { getSupabaseStatus, seedSupabaseSources, isSupabaseConfigured } from "../supabase";
 export { AnalysisError } from "./errors";

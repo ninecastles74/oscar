@@ -13,6 +13,7 @@ import { ClickableScore } from "@/features/explainability/clickable-score";
 import { ScoreExplainabilitySheet } from "@/features/explainability/score-explainability-sheet";
 import { useState } from "react";
 import type { ScoreExplainability } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 
 export function ReportView({
   report,
@@ -53,7 +54,7 @@ export function ReportView({
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Final report</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.analysis} report</div>
           <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">{report.title}</h1>
           <a href={report.url} className="mt-1 inline-flex items-center gap-1 text-xs text-accent hover:underline">
             <FileText className="h-3 w-3" /> {report.url}

@@ -2,6 +2,7 @@ import type { ClaimResearchReport } from "@/types/news-platform";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { EvidenceWeightPanel } from "./evidence-weight-panel";
 import { SourceChainPanel } from "./source-chain-panel";
+import { OSCAR } from "@/lib/brand";
 
 export function ClaimResearchPanel({ research }: { research: ClaimResearchReport }) {
   const { scores } = research;
@@ -10,7 +11,7 @@ export function ClaimResearchPanel({ research }: { research: ClaimResearchReport
     <div className="mt-4 space-y-4 rounded-lg border border-accent/20 bg-accent/5 p-4">
       <div>
         <h4 className="text-xs font-semibold uppercase tracking-wide text-accent">
-          Claim research
+          {OSCAR.research}
         </h4>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {research.researchSummary}

@@ -1,0 +1,15 @@
+# =============================================================================
+# OSCAR — Cloudflare Wrangler local secrets (copy to .dev.vars — gitignored)
+# =============================================================================
+#   cp .dev.vars.example .dev.vars
+# Same keys as .env.example. Wrangler injects these into process.env during
+# `vite dev` / `wrangler dev` with the Cloudflare plugin.
+# =============================================================================
+
+# See .env.example for the full variable list and comments.
+# Minimal Supabase setup:
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ENABLED=true
+DATABASE_URL=
+DIRECT_URL=

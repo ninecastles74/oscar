@@ -1,4 +1,5 @@
 import type { MultiModelClaimVerification } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 import { Bot, Scale } from "lucide-react";
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -15,11 +16,11 @@ export function MultiModelPanel({ verification }: { verification: MultiModelClai
       <div>
         <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
           <Bot className="h-3.5 w-3.5" />
-          Multi-model verification
+          {OSCAR.multiModel}
         </h4>
         <p className="mt-1 text-xs text-muted-foreground">{consensus.consensusSummary}</p>
         <p className="mt-1 text-sm font-semibold tabular-nums">
-          Consensus: {consensus.finalVerdict} · {consensus.finalConfidence}%
+          {OSCAR.consensus}: {consensus.finalVerdict} · {consensus.finalConfidence}%
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             ({consensus.arbitrationMethod.replace(/_/g, " ")})
           </span>

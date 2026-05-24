@@ -91,7 +91,7 @@ export async function fetchArticleFromUrl(
       signal: controller.signal,
       headers: {
         Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "VeridictBot/1.0 (+article-metadata)",
+        "User-Agent": "OscarBot/1.0 (+article-metadata)",
       },
       redirect: "follow",
     });

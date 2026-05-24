@@ -3,6 +3,7 @@ import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { ReportView } from "@/features/reports/report-view";
 import { getManualAnalysis } from "@/server/analysis/functions";
+import { OSCAR, pageTitle } from "@/lib/brand";
 
 const searchSchema = z.object({
   id: z.string().min(1),
@@ -10,7 +11,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/analyze/results")({
   validateSearch: searchSchema,
-  head: () => ({ meta: [{ title: "Analysis results — Veridict" }] }),
+  head: () => ({ meta: [{ title: pageTitle(OSCAR.analysis) }] }),
   loaderDeps: ({ search }) => ({ requestId: search.id }),
   loader: async ({ deps }) => {
     const result = await getManualAnalysis({ data: { requestId: deps.requestId } });

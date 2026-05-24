@@ -8,6 +8,7 @@ import type { AnalysisReport } from "@/types/news-platform";
 import type { PipelineArticleContext } from "../analysis/types";
 import type { VerificationPipelineResults } from "../analysis/verification/types";
 import { contentTopicToLegacyCategory } from "../analysis/topics/map-legacy-category";
+import { persistVerificationToSupabase } from "../supabase";
 import { toScoringSignals } from "./adapters/scoring-signals";
 import {
   appendHistory,
@@ -100,6 +101,13 @@ export function persistRecalculatedScores(
   for (const entry of historyEntries) appendHistory(entry);
   recordHistoricalSnapshotsFromResult(result, ctx.topic);
   saveVerificationSnapshot(ctx.reportId, ctx.report, ctx.results, ctx.article);
+
+  void persistVerificationToSupabase(ctx.report, ctx.results, ctx.article, {
+    result,
+    ctx,
+  }).catch((err) => {
+    console.error("[supabase] persist verification failed:", err);
+  });
 
   return {
     disclaimer: RELIABILITY_SCORING_DISCLAIMER,

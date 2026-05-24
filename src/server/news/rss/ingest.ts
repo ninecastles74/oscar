@@ -85,7 +85,7 @@ export async function fetchRssFromRegistry(
       const res = await fetchWithRateLimit(`${provider}:${feed.id}`, feed.feedUrl, env, {
         headers: {
           Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml",
-          "User-Agent": "VeridictNewsBot/1.0 (+https://veridict.local)",
+          "User-Agent": "OscarNewsBot/1.0 (+https://oscar.local)",
         },
       });
       const xml = await res.text();

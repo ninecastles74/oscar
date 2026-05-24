@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { SOURCES, type Source } from "@/lib/mock-data";
+import { OSCAR } from "@/lib/brand";
 
 export function SourcesAdminView() {
   const [list, setList] = useState<Source[]>(SOURCES);
@@ -13,7 +14,7 @@ export function SourcesAdminView() {
       <div className="mb-6 flex items-end justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin</div>
-          <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Approved sources</h1>
+          <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">{OSCAR.sources}</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
             Sources used for cross-reference analysis. Reliability scores are aggregated from third-party media monitors.
           </p>

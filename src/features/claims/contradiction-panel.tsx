@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ContradictionAnalysisReport } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 import { AlertTriangle, Clock, GitCompare, HelpCircle, Link2 } from "lucide-react";
 
 export function ContradictionPanel({ analysis }: { analysis: ContradictionAnalysisReport }) {
@@ -8,7 +9,7 @@ export function ContradictionPanel({ analysis }: { analysis: ContradictionAnalys
       <div>
         <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-destructive">
           <AlertTriangle className="h-3.5 w-3.5" />
-          Contradiction analysis
+          {OSCAR.contradiction}
         </h4>
         <p className="mt-1 text-xs text-muted-foreground">{analysis.analysisSummary}</p>
         <p className="mt-1 text-sm font-semibold tabular-nums">

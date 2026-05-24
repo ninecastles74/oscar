@@ -1,4 +1,5 @@
 import type { ArticleContentPolicy, Category } from "@/types/news-platform";
+import { MAJOR_US_WORLD_RSS_FEEDS } from "../major-publishers";
 
 export interface RssFeedRegistryEntry {
   id: string;
@@ -318,6 +319,9 @@ export function loadRssFeedRegistry(legacyFeedUrls: string[] = []): RssFeedRegis
   const byId = new Map(feeds.map((f) => [f.id, f]));
   for (const entry of custom) {
     byId.set(entry.id, entry);
+  }
+  for (const major of MAJOR_US_WORLD_RSS_FEEDS) {
+    byId.set(major.id, major);
   }
   feeds = [...byId.values()];
 

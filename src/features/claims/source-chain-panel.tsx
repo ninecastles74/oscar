@@ -1,4 +1,5 @@
 import type { SourceChainTraceReport } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 import { AlertTriangle, GitBranch, Radio } from "lucide-react";
 
 export function SourceChainPanel({ trace }: { trace: SourceChainTraceReport }) {
@@ -10,7 +11,7 @@ export function SourceChainPanel({ trace }: { trace: SourceChainTraceReport }) {
       <div>
         <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground">
           <GitBranch className="h-3.5 w-3.5" />
-          Source chain trace
+          {OSCAR.sourceChain}
         </h4>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{trace.traceSummary}</p>
       </div>

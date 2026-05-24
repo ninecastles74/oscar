@@ -11,6 +11,7 @@ import {
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/app/site-header";
 import { SiteFooter } from "@/app/site-footer";
+import { BRAND_NAME, defaultSiteTitle, OSCAR } from "@/lib/brand";
 
 function NotFoundComponent() {
   return (
@@ -74,16 +75,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Veridict — AI News Intelligence" },
-      { name: "description", content: "AI-powered news analysis: cross-source verification, claim breakdown, and confidence scoring." },
-      { name: "author", content: "Veridict" },
-      { property: "og:title", content: "Veridict — AI News Intelligence" },
-      { property: "og:description", content: "Cross-source verification and AI claim analysis for the news that matters." },
+      { title: defaultSiteTitle() },
+      {
+        name: "description",
+        content: `${OSCAR.intelligence}: cross-source verification, claim breakdown, and confidence scoring.`,
+      },
+      { name: "author", content: BRAND_NAME },
+      { property: "og:title", content: defaultSiteTitle() },
+      {
+        property: "og:description",
+        content: `${OSCAR.consensus} and ${OSCAR.analysis.toLowerCase()} for the news that matters.`,
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "icon", href: "/oscar-logo.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/oscar-logo.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },

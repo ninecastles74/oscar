@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Check, HelpCircle, X } from "lucide-react";
 import type { StoryConsensusReport, SourceAgreementStance } from "@/types/news-platform";
 import { ConfidenceBar } from "@/components/confidence-bar";
+import { OSCAR } from "@/lib/brand";
 import { StatTile } from "@/components/stat-tile";
 import { SourceBadge } from "@/features/sources/source-badge";
 import { sourceById } from "@/lib/mock-data";
@@ -29,7 +30,7 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
 
       <div className="mt-4">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          Story consensus
+          {OSCAR.consensus}
         </div>
         <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">{report.title}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">{report.summary}</p>
@@ -40,7 +41,7 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Consensus score" value={`${report.consensusScore}%`} />
+        <StatTile label={`${OSCAR.consensus} score`} value={`${report.consensusScore}%`} />
         <StatTile label="Dispute score" value={`${report.disputeScore}%`} />
         <StatTile label="Uncertainty score" value={`${report.uncertaintyScore}%`} />
         <StatTile label="Story confidence" value={`${report.storyConfidence}%`} />
@@ -50,7 +51,7 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
         <section className="rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Score breakdown</h2>
           <div className="mt-4 space-y-4">
-            <ConfidenceBar value={report.consensusScore} label="Consensus (cross-source agreement)" />
+            <ConfidenceBar value={report.consensusScore} label={`${OSCAR.consensus} (cross-source agreement)`} />
             <ConfidenceBar value={100 - report.disputeScore} label="Agreement (inverse of dispute)" />
             <ConfidenceBar
               value={100 - report.uncertaintyScore}

@@ -1,4 +1,8 @@
-# Veridict PostgreSQL / Prisma
+# OSCAR PostgreSQL / Prisma / Supabase
+
+See [docs/SUPABASE.md](../docs/SUPABASE.md) for full Supabase setup.
+
+# OSCAR PostgreSQL / Prisma
 
 Evidence-weighted reliability storage — **not** objective truth declarations.
 
@@ -6,7 +10,7 @@ Evidence-weighted reliability storage — **not** objective truth declarations.
 
 ```bash
 # .env
-DATABASE_URL="postgresql://user:password@localhost:5432/veridict?schema=public"
+DATABASE_URL="postgresql://user:password@localhost:5432/oscar?schema=public"
 
 npm install prisma @prisma/client --save-dev
 npx prisma generate

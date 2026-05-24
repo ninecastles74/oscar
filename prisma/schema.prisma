@@ -1,5 +1,5 @@
 // =============================================================================
-// Veridict — PostgreSQL schema for reliability & verification tracking
+// OSCAR — PostgreSQL schema for reliability & verification tracking
 // =============================================================================
 // Scores are evidence-weighted signals — not declarations of objective truth.
 // Run: npx prisma migrate dev | npx prisma generate
@@ -10,8 +10,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,17 @@ enum AnalysisRunStatus {
   processing
   completed
   failed
+}
+
+enum SubscriptionTier {
+  free
+  pro
+  team
+}
+
+enum UserAnalysisKind {
+  manual_article
+  personal_writing
 }
 
 enum ContentPolicy {
@@ -460,4 +472,38 @@ model HistoricalScoreSnapshot {
   @@index([topic, metricType, recordedAt(sort: Desc)])
   @@index([articleScoreId])
   @@map("historical_score_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// App users & AI usage quotas (manual / personal writing only)
+// ---------------------------------------------------------------------------
+
+/// Platform account linked to Supabase Auth user id.
+model AppUser {
+  id        String           @id /// Supabase auth.users id
+  email     String           @unique
+  tier      SubscriptionTier @default(free)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  usageEvents AnalysisUsage[]
+
+  @@map("app_users")
+}
+
+/// Counts toward daily AI analysis quota (not scheduled news jobs).
+model AnalysisUsage {
+  id          String           @id @default(cuid())
+  userId      String?          @map("user_id")
+  anonymousId String?          @map("anonymous_id")
+  kind        UserAnalysisKind
+  dayKey      String           @map("day_key") @db.VarChar(10)
+  requestId   String?          @map("request_id")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, dayKey])
+  @@index([anonymousId, dayKey])
+  @@map("analysis_usage")
 }

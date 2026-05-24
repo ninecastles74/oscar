@@ -1,5 +1,6 @@
 import type { ClaimConsensusReport } from "@/types/news-platform";
 import { CLAIM_CONSENSUS_DISCLAIMERS } from "@/types/news-platform";
+import { OSCAR } from "@/lib/brand";
 import { Layers } from "lucide-react";
 
 export function ConsensusPanel({ consensus }: { consensus: ClaimConsensusReport }) {
@@ -8,7 +9,7 @@ export function ConsensusPanel({ consensus }: { consensus: ClaimConsensusReport 
       <div>
         <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
           <Layers className="h-3.5 w-3.5" />
-          Consensus engine
+          {OSCAR.consensus}
         </h4>
         <p className="mt-1 text-sm font-semibold capitalize text-foreground">
           {consensus.verdict.replace(/_/g, " ")} · {consensus.confidence}% confidence

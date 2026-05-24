@@ -9,6 +9,7 @@ import {
   computeMetrics, FEEDS, sampleClusters, sampleNormalized, sampleRawArticles, STAGES,
   type PipelineMetrics, type StageId,
 } from "@/lib/mock-data";
+import { OSCAR } from "@/lib/brand";
 
 const ICONS: Record<StageId, React.ComponentType<{ className?: string }>> = {
   fetch: Rss, normalize: Database, dedupe: Layers, cluster: Layers, rank: ListOrdered,
@@ -76,8 +77,8 @@ export function PipelineView() {
     <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Automated pipeline</div>
-          <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Ingest → Cluster → Analyze → Report</h1>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.pipeline}</div>
+          <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Ingest → Cluster → {OSCAR.analysis} → Report</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Simulated end-to-end run. Click <span className="font-semibold text-foreground">Run pipeline</span> to step
             through each stage with mock data — same shape the live system will use.

@@ -4,9 +4,10 @@ import { clusterById, sourceById, storiesForCluster } from "@/lib/mock-data";
 import type { StoryConsensusReport } from "@/types/news-platform";
 import { StoryConsensusView } from "@/features/story-clusters/story-consensus-view";
 import { getStoryConsensusReport, runStoryConsensus } from "@/server/consensus/functions";
+import { OSCAR, pageTitle } from "@/lib/brand";
 
 export const Route = createFileRoute("/consensus/$clusterId")({
-  head: ({ params }) => ({ meta: [{ title: `Story consensus — ${params.clusterId}` }] }),
+  head: ({ params }) => ({ meta: [{ title: pageTitle(`${OSCAR.consensus} · ${params.clusterId}`) }] }),
   loader: async ({ params }) => {
     const cluster = clusterById(params.clusterId);
     if (!cluster) throw notFound();

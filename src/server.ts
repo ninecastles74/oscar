@@ -82,12 +82,27 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
+    const cron = controller.cron;
+    const { scheduledIngestCron, isScheduledNewsEnabled } = await import(
+      "./server/analysis/context"
+    );
+
+    if (isScheduledNewsEnabled() && cron === scheduledIngestCron()) {
+      ctx.waitUntil(
+        import("./server/jobs/news/scheduled-pipeline")
+          .then(({ runScheduledNewsPipeline }) => runScheduledNewsPipeline())
+          .then((r) => console.log("[scheduled] news pipeline", r))
+          .catch((err) => console.error("[scheduled] news pipeline failed", err)),
+      );
+      return;
+    }
+
     const { isReliabilityJobsEnabled } = await import("./server/jobs/config");
     const { runCronScheduledJobs } = await import("./server/jobs/runner");
     if (!isReliabilityJobsEnabled()) return;
     ctx.waitUntil(
       Promise.resolve()
-        .then(() => runCronScheduledJobs(controller.cron))
+        .then(() => runCronScheduledJobs(cron))
         .catch((err) => console.error("[scheduled] reliability jobs failed", err)),
     );
   },

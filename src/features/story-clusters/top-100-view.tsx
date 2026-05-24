@@ -1,27 +1,46 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { AlertTriangle, Search } from "lucide-react";
-import { CLUSTERS } from "@/lib/mock-data";
+import type { Cluster } from "@/lib/mock-data/types";
 import { ConfidenceBar } from "@/components/confidence-bar";
+import { OSCAR } from "@/lib/brand";
 
 const CATS = ["All", "Politics", "World", "Business", "Technology", "Science", "Health", "Climate", "Markets"];
 
-export function Top100View() {
+export function Top100View({
+  clusters,
+  meta,
+  usingLiveFeed,
+}: {
+  clusters: Cluster[];
+  meta?: { lastIngestAt?: string; lastAnalysisAt?: string; top100Count?: number };
+  usingLiveFeed?: boolean;
+}) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
-  const list = CLUSTERS.filter(
+  const list = clusters.filter(
     (c) => (cat === "All" || c.category === cat) && c.title.toLowerCase().includes(q.toLowerCase()),
   );
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="mb-6">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Automatic monitor</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.monitor}</div>
         <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Top 100 stories</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Stories from approved publishers, clustered by event. Click any cluster to see the cross-source comparison
-          and claim breakdown.
+          Stories from major US and world outlets (Fox, ABC, NBC, CBS, CNN, WSJ, NYT, AP, BBC, and more), clustered
+          by event. New articles get full Oscar analysis every 8 hours; older stories stay visible until they age out
+          of the Top 100 by date.
         </p>
+        {usingLiveFeed && meta?.lastIngestAt && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last ingest {new Date(meta.lastIngestAt).toLocaleString()}
+            {meta.lastAnalysisAt
+              ? ` · Last analysis ${new Date(meta.lastAnalysisAt).toLocaleString()}`
+              : ""}
+            {meta.top100Count != null ? ` · ${meta.top100Count} in feed` : ""}
+          </p>
+        )}
       </div>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -1,11 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "oscar",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
   "triggers": {
     "crons": [
+      "0 */8 * * *",
       "*/30 * * * *",
       "0 */4 * * *",
       "0 2 * * *",

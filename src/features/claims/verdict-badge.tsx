@@ -1,10 +1,11 @@
 import { AlertTriangle, CheckCircle2, HelpCircle, MinusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Verdict } from "@/lib/mock-data";
+import { OSCAR } from "@/lib/brand";
 
 const VERDICT_CONFIG = {
   supported: {
-    label: "Supported",
+    label: OSCAR.verified,
     cls: "bg-success/10 text-success border-success/30",
     Icon: CheckCircle2,
   },

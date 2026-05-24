@@ -1,22 +1,17 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { OscarLogo } from "@/components/oscar-logo";
 import { NAV_ITEMS } from "./nav-items";
 
 export function SiteHeader() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   return (
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-8 px-6">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-sm bg-foreground text-background font-serif text-sm font-bold">
-            V
-          </span>
-          <span className="font-serif text-lg font-semibold tracking-tight">Veridict</span>
-          <span className="hidden text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
-            News Intelligence
-          </span>
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
+        <Link to="/" className="shrink-0 py-1" aria-label="OSCAR home">
+          <OscarLogo size="header" priority />
         </Link>
-        <nav className="ml-auto flex items-center gap-1">
+        <nav className="ml-auto flex items-center gap-1 overflow-x-auto">
           {NAV_ITEMS.map((n) => {
             const active = path === n.to || (n.to !== "/dashboard" && path.startsWith(n.to));
             return (
@@ -24,7 +19,7 @@ export function SiteHeader() {
                 key={n.to}
                 to={n.to}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                  "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
                   active && "bg-secondary text-foreground",
                 )}
               >

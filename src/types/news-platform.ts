@@ -1,5 +1,5 @@
 // =============================================================================
-// Veridict — Core Platform Types
+// OSCAR — Core Platform Types
 // =============================================================================
 // These types model the full automatic + manual news-analysis pipeline.
 // Every field is documented; optional fields are marked with `?`.

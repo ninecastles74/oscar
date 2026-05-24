@@ -4,11 +4,15 @@ import type { ApiProviderId } from "@/types/news-platform";
 import { ingestNews, type IngestNewsResult } from "./ingest";
 import { getNewsIngestionEnv, isProviderConfigured } from "./env";
 import { getRssRegistrySummary } from "./rss/ingest";
+import { getTop100Clusters, getFeedMeta, getStoredCluster } from "./feed-store";
+import { MAJOR_US_WORLD_SOURCES } from "./major-publishers";
+import { runScheduledNewsPipeline } from "../jobs/news/scheduled-pipeline";
 
 const providerIdSchema = z.enum(["newsapi", "gnews", "guardian", "nyt", "rss", "publishers"]);
 
 const ingestInputSchema = z
   .object({
+    cronSecret: z.string().optional(),
     providers: z.array(providerIdSchema).optional(),
     country: z.string().length(2).optional(),
     language: z.string().min(2).max(5).optional(),
@@ -21,6 +25,10 @@ const ingestInputSchema = z
 export const runNewsIngestion = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ingestInputSchema.parse(data))
   .handler(async ({ data }): Promise<IngestNewsResult> => {
+    const expected = process.env.CRON_SECRET?.trim();
+    if (expected && data?.cronSecret !== expected) {
+      throw new Error("Unauthorized: scheduled ingest only (invalid CRON_SECRET).");
+    }
     return ingestNews({
       providers: data?.providers as ApiProviderId[] | undefined,
       country: data?.country,
@@ -54,3 +62,44 @@ export const listRssFeeds = createServerFn({ method: "GET" }).handler(async () =
   const env = getNewsIngestionEnv();
   return getRssRegistrySummary(env);
 });
+
+/** Top 100 story clusters from the live feed (newest ranked; max 100 slots). */
+export const getTop100Feed = createServerFn({ method: "GET" }).handler(async () => {
+  const clusters = getTop100Clusters();
+  const meta = getFeedMeta();
+  return {
+    clusters,
+    meta,
+    majorSources: MAJOR_US_WORLD_SOURCES.map((s) => ({
+      id: s.id,
+      name: s.name,
+      domain: s.domain,
+      reliability: s.reliability,
+      bias: s.bias,
+    })),
+  };
+});
+
+/** Run 8h scheduled ingest + incremental heavyweight analysis (requires CRON_SECRET if set). */
+export const runScheduledNewsRefresh = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z.object({ cronSecret: z.string().optional() }).parse(data ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const expected = process.env.CRON_SECRET?.trim();
+    if (expected && data?.cronSecret !== expected) {
+      throw new Error("Unauthorized: invalid CRON_SECRET");
+    }
+    return runScheduledNewsPipeline();
+  });
+
+/** Single cluster from live feed. */
+export const getFeedCluster = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z.object({ clusterId: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const cluster = getStoredCluster(data.clusterId);
+    if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
+    return { cluster };
+  });
