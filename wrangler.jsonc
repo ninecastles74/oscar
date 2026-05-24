@@ -4,14 +4,14 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // Free Workers: max 5 cron triggers per *account* (not per Worker). Keep ≤4 here
+  // if you use crons on other Workers. Daily reliability jobs share one schedule.
   "triggers": {
     "crons": [
       "0 */8 * * *",
       "*/30 * * * *",
       "0 */4 * * *",
-      "0 2 * * *",
-      "0 3 * * *",
-      "0 4 * * *"
+      "0 2 * * *"
     ]
   }
 }

@@ -30,14 +30,14 @@ export const DEFAULT_JOB_SCHEDULES: JobScheduleConfig[] = [
   },
   {
     jobId: "recalculate_author_scores",
-    cron: "0 3 * * *",
-    description: "Roll up author reliability (daily 03:00 UTC)",
+    cron: "0 2 * * *",
+    description: "Roll up author reliability (daily 02:00 UTC, batched with org/topic)",
     enabled: true,
   },
   {
     jobId: "update_topic_reliability",
-    cron: "0 4 * * *",
-    description: "Update topic-specific reliability aggregates (daily 04:00 UTC)",
+    cron: "0 2 * * *",
+    description: "Update topic reliability aggregates (daily 02:00 UTC, batched)",
     enabled: true,
   },
 ];

@@ -40,6 +40,8 @@ In Cloudflare → Worker → **Settings → Build**:
 
 Add runtime secrets under **Variables & Secrets** (Supabase, API keys, etc.).
 
+**Cron limits:** Workers Free allows **5 cron triggers per account** total. This project registers 4 (news + reliability). If deploy fails on `/schedules`, remove crons from other Workers or upgrade to Workers Paid.
+
 ## Quick start
 
 ```bash
