@@ -24,6 +24,7 @@ import { Route as CompareClusterIdRouteImport } from './routes/compare.$clusterI
 import { Route as ClaimsClaimIdRouteImport } from './routes/claims.$claimId'
 import { Route as AnalyzeResultsRouteImport } from './routes/analyze.results'
 import { Route as AdminSourcesRouteImport } from './routes/admin.sources'
+import { Route as StoriesClusterIdArticleIdRouteImport } from './routes/stories.$clusterId.$articleId'
 
 const StoriesRoute = StoriesRouteImport.update({
   id: '/stories',
@@ -100,6 +101,12 @@ const AdminSourcesRoute = AdminSourcesRouteImport.update({
   path: '/admin/sources',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StoriesClusterIdArticleIdRoute =
+  StoriesClusterIdArticleIdRouteImport.update({
+    id: '/$articleId',
+    path: '/$articleId',
+    getParentRoute: () => StoriesClusterIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -116,7 +123,8 @@ export interface FileRoutesByFullPath {
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
-  '/stories/$clusterId': typeof StoriesClusterIdRoute
+  '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -133,7 +141,8 @@ export interface FileRoutesByTo {
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
-  '/stories/$clusterId': typeof StoriesClusterIdRoute
+  '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -151,7 +160,8 @@ export interface FileRoutesById {
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
-  '/stories/$clusterId': typeof StoriesClusterIdRoute
+  '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/stories/$clusterId/$articleId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/stories/$clusterId/$articleId'
   id:
     | '__root__'
     | '/'
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/stories/$clusterId/$articleId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stories/$clusterId/$articleId': {
+      id: '/stories/$clusterId/$articleId'
+      path: '/$articleId'
+      fullPath: '/stories/$clusterId/$articleId'
+      preLoaderRoute: typeof StoriesClusterIdArticleIdRouteImport
+      parentRoute: typeof StoriesClusterIdRoute
+    }
   }
 }
 
@@ -344,12 +364,23 @@ const AnalyzeRouteChildren: AnalyzeRouteChildren = {
 const AnalyzeRouteWithChildren =
   AnalyzeRoute._addFileChildren(AnalyzeRouteChildren)
 
+interface StoriesClusterIdRouteChildren {
+  StoriesClusterIdArticleIdRoute: typeof StoriesClusterIdArticleIdRoute
+}
+
+const StoriesClusterIdRouteChildren: StoriesClusterIdRouteChildren = {
+  StoriesClusterIdArticleIdRoute: StoriesClusterIdArticleIdRoute,
+}
+
+const StoriesClusterIdRouteWithChildren =
+  StoriesClusterIdRoute._addFileChildren(StoriesClusterIdRouteChildren)
+
 interface StoriesRouteChildren {
-  StoriesClusterIdRoute: typeof StoriesClusterIdRoute
+  StoriesClusterIdRoute: typeof StoriesClusterIdRouteWithChildren
 }
 
 const StoriesRouteChildren: StoriesRouteChildren = {
-  StoriesClusterIdRoute: StoriesClusterIdRoute,
+  StoriesClusterIdRoute: StoriesClusterIdRouteWithChildren,
 }
 
 const StoriesRouteWithChildren =

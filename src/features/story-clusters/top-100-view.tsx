@@ -82,7 +82,7 @@ export function Top100View({
           {list.map((c, i) => (
             <Link
               key={c.id}
-              to="/stories/$clusterId"
+              to="/consensus/$clusterId"
               params={{ clusterId: c.id }}
               className="grid grid-cols-[40px_72px_1fr_140px_160px_120px] items-center gap-4 px-4 py-4 transition-colors hover:bg-secondary/40"
             >

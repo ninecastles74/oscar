@@ -3,12 +3,28 @@ import type { Cluster } from "@/lib/mock-data";
 import { clusterById, sourceById, storiesForCluster } from "@/lib/mock-data";
 import type { StoryConsensusReport } from "@/types/news-platform";
 import { StoryConsensusView } from "@/features/story-clusters/story-consensus-view";
-import { getStoryConsensusReport, runStoryConsensus } from "@/server/consensus/functions";
+import {
+  getStoryConsensusReport,
+  loadFeedClusterConsensus,
+  runStoryConsensus,
+} from "@/server/consensus/functions";
+import { storyClusterToUiCluster } from "@/lib/feed-adapter";
 import { OSCAR, pageTitle } from "@/lib/brand";
 
 export const Route = createFileRoute("/consensus/$clusterId")({
   head: ({ params }) => ({ meta: [{ title: pageTitle(`${OSCAR.consensus} · ${params.clusterId}`) }] }),
   loader: async ({ params }) => {
+    const live = await loadFeedClusterConsensus({ data: { clusterId: params.clusterId } });
+    if (live && "report" in live && live.report) {
+      return { report: live.report as StoryConsensusReport, cluster: storyClusterToUiCluster(live.cluster, 0) };
+    }
+    if (live && "error" in live && live.error && live.cluster) {
+      return {
+        error: live.error,
+        cluster: storyClusterToUiCluster(live.cluster, 0),
+      };
+    }
+
     const cluster = clusterById(params.clusterId);
     if (!cluster) throw notFound();
 
@@ -57,7 +73,7 @@ export const Route = createFileRoute("/consensus/$clusterId")({
 
 type LoaderData =
   | { report: StoryConsensusReport; cluster: Cluster }
-  | { error: { message: string }; cluster: Cluster };
+  | { error: { message: string; code?: string }; cluster: Cluster };
 
 function ConsensusRoute() {
   const data = Route.useLoaderData() as LoaderData;
@@ -65,14 +81,10 @@ function ConsensusRoute() {
   if ("error" in data && data.error) {
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
-        <h1 className="font-serif text-2xl font-semibold">Consensus unavailable</h1>
+        <h1 className="font-serif text-2xl font-semibold">Analysis unavailable</h1>
         <p className="mt-2 text-sm text-muted-foreground">{data.error.message}</p>
-        <Link
-          to="/stories/$clusterId"
-          params={{ clusterId: data.cluster.id }}
-          className="mt-6 inline-block text-sm text-accent hover:underline"
-        >
-          Back to story
+        <Link to="/stories" className="mt-6 inline-block text-sm text-accent hover:underline">
+          Back to Top 100
         </Link>
       </main>
     );

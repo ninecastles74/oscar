@@ -50,7 +50,7 @@ export function DashboardView() {
             {trending.map((c, i) => (
               <Link
                 key={c.id}
-                to="/stories/$clusterId"
+                to="/consensus/$clusterId"
                 params={{ clusterId: c.id }}
                 className="flex items-start gap-4 p-4 transition-colors hover:bg-secondary/40"
               >

@@ -1,8 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import type { NewsArticle, StoryCluster } from "@/types/news-platform";
-import { runStoryConsensusForCluster, runStoryConsensusFromArticles } from "./analyze-cluster";
+import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/news-platform";
+import { analysisReportToManualReport } from "@/lib/analysis-adapter";
+import { buildArticleBundle, runStoryConsensusForCluster } from "./analyze-cluster";
 import { getClusterArticles, getStoryConsensus, saveStoryConsensus } from "./store";
+import {
+  getArticleBundle,
+  getClusterArticlesFromStore,
+  getStoredCluster,
+  markArticleAnalyzed,
+  updateClusterFromConsensus,
+} from "../news/feed-store";
+import { stableArticleId } from "../news/utils/text";
+import type { PipelineArticleContext } from "../analysis/types";
+import { computeAndStoreReliabilityScores, getReliabilityBundleByArticleId } from "../reliability/engine";
+import { applyClaimConsensusToReport } from "../consensus-engine";
+import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
 
@@ -85,4 +98,133 @@ export const getStoryConsensusReport = createServerFn({ method: "GET" })
       return { error: { code: "NOT_FOUND", message: "No consensus report for this cluster" } };
     }
     return report;
+  });
+
+function articleToPipeline(article: NewsArticle): PipelineArticleContext {
+  const text =
+    article.fullText ??
+    article.description ??
+    article.ingestMetadata?.summary ??
+    article.title;
+  return {
+    submissionId: article.id || stableArticleId(article.url),
+    title: article.title,
+    url: article.url,
+    summary: article.description?.slice(0, 500) ?? article.title,
+    analysisText: text.slice(0, 50_000),
+    author: article.author,
+    publishedAt: article.publishedAt,
+    language: article.language ?? "en",
+    contentRights: article.ingestMetadata?.contentPolicy === "feed_summary_only"
+      ? "metadata_only"
+      : "licensed_excerpt",
+    rightsNote:
+      article.ingestMetadata?.rightsNote ?? "Ingested feed summary for on-demand analysis.",
+  };
+}
+
+function ensureFeedConsensusReport(
+  cluster: StoryCluster,
+  articles: NewsArticle[],
+): StoryConsensusReport {
+  const cached = getStoryConsensus(cluster.id);
+  if (cached) return cached;
+  const report = runStoryConsensusForCluster(cluster, articles);
+  saveStoryConsensus(report);
+  updateClusterFromConsensus(cluster.id, report);
+  return report;
+}
+
+/** Live Top 100 cluster: return or build Oscar consensus analysis for the story. */
+export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) => clusterIdSchema.parse(data))
+  .handler(async ({ data }) => {
+    const cluster = getStoredCluster(data.clusterId);
+    if (!cluster) {
+      return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
+    }
+    const articles = getClusterArticlesFromStore(data.clusterId);
+    if (articles.length < 2) {
+      return {
+        error: {
+          code: "INSUFFICIENT_COVERAGE",
+          message: "Need at least 2 articles in this cluster for Oscar analysis.",
+        },
+        cluster,
+      };
+    }
+    try {
+      const report = ensureFeedConsensusReport(cluster, articles);
+      return { report, cluster };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Consensus analysis failed";
+      return { error: { code: "CONSENSUS_FAILED", message }, cluster };
+    }
+  });
+
+/** Single feed article: return or build full Oscar analysis report. */
+export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        clusterId: z.string().min(1),
+        articleId: z.string().min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const cluster = getStoredCluster(data.clusterId);
+    if (!cluster) {
+      return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
+    }
+    const articles = getClusterArticlesFromStore(data.clusterId);
+    const article = articles.find(
+      (a) => a.id === data.articleId || stableArticleId(a.url) === data.articleId,
+    );
+    if (!article) {
+      return { error: { code: "NOT_FOUND", message: "Article not in this cluster" } };
+    }
+
+    const key = article.id || stableArticleId(article.url);
+    let bundle = getArticleBundle(key);
+    if (!bundle) {
+      bundle = buildArticleBundle(article);
+      const ctx = articleToPipeline(article);
+      const reliability = computeAndStoreReliabilityScores({
+        report: bundle.report,
+        results: bundle.results,
+        article: ctx,
+        reportId: `feed_${key}`,
+        authorDisplayName: article.author,
+      });
+      bundle = { ...bundle, report: applyClaimConsensusToReport(bundle.report, reliability) };
+      markArticleAnalyzed(key, bundle);
+    }
+
+    const reliability =
+      getReliabilityBundleByArticleId(bundle.articleId) ??
+      computeAndStoreReliabilityScores({
+        report: bundle.report,
+        results: bundle.results,
+        article: articleToPipeline(article),
+        reportId: `feed_${key}`,
+        authorDisplayName: article.author,
+      });
+
+    if (!reliability) {
+      return { error: { code: "ANALYSIS_FAILED", message: "Could not build reliability scores" } };
+    }
+
+    const explainability = buildFullExplainabilityBundle(
+      bundle.report,
+      reliability,
+      bundle.results,
+    );
+
+    return {
+      clusterId: data.clusterId,
+      report: analysisReportToManualReport(bundle.report),
+      platformReport: bundle.report,
+      explainability,
+    };
   });

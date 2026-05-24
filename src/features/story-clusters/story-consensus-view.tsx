@@ -21,11 +21,10 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
       <Link
-        to="/stories/$clusterId"
-        params={{ clusterId: report.clusterId }}
+        to="/stories"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-3 w-3" /> Back to story
+        <ArrowLeft className="h-3 w-3" /> Back to Top 100
       </Link>
 
       <div className="mt-4">
@@ -97,19 +96,26 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
                 </th>
                 {map.sources.map((s) => (
                   <th key={s.articleId} className="px-3 py-3 text-center">
-                    <SourceBadge
-                      source={
-                        sourceById(s.sourceId) ?? {
-                          id: s.sourceId,
-                          name: s.sourceName,
-                          domain: s.sourceDomain,
-                          bias: "center",
-                          reliability: 70,
-                          approved: true,
+                    <Link
+                      to="/stories/$clusterId/$articleId"
+                      params={{ clusterId: report.clusterId, articleId: s.articleId }}
+                      className="inline-flex flex-col items-center gap-1 hover:opacity-80"
+                      title={`Open ${OSCAR.analysis} for this article`}
+                    >
+                      <SourceBadge
+                        source={
+                          sourceById(s.sourceId) ?? {
+                            id: s.sourceId,
+                            name: s.sourceName,
+                            domain: s.sourceDomain,
+                            bias: "center",
+                            reliability: 70,
+                            approved: true,
+                          }
                         }
-                      }
-                      small
-                    />
+                        small
+                      />
+                    </Link>
                   </th>
                 ))}
               </tr>

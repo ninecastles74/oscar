@@ -30,7 +30,8 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
   };
 }
 
-function analyzeArticle(article: NewsArticle): AnalyzedArticleBundle {
+/** Run verification pipeline for one feed article (sync; used on demand in UI). */
+export function buildArticleBundle(article: NewsArticle): AnalyzedArticleBundle {
   const ctx = articleToPipeline(article);
   const { report, results } = runVerificationPipeline(ctx);
   const domain = article.sourceDomain ?? extractDomain(article.url);
@@ -66,7 +67,7 @@ export function runStoryConsensusForCluster(
     throw new Error("Story consensus requires at least 2 articles covering the same event.");
   }
 
-  const analyzed = clusterArticles.map(analyzeArticle);
+  const analyzed = clusterArticles.map(buildArticleBundle);
   const input: StoryConsensusInput = {
     clusterId: cluster.id,
     title: cluster.title,
@@ -84,7 +85,7 @@ export function runStoryConsensusFromArticles(
   if (articles.length < 2) {
     throw new Error("Story consensus requires at least 2 articles.");
   }
-  const analyzed = articles.slice(0, MAX_ARTICLES_PER_CONSENSUS).map(analyzeArticle);
+  const analyzed = articles.slice(0, MAX_ARTICLES_PER_CONSENSUS).map(buildArticleBundle);
   return buildStoryConsensus({
     clusterId,
     title,

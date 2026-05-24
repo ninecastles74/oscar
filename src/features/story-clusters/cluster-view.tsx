@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ExternalLink, GitCompare } from "lucide-react";
+import { ArrowLeft, GitCompare } from "lucide-react";
 import type { Cluster, Story } from "@/lib/mock-data/types";
 import { claimsForCluster, sourceForStory } from "@/lib/mock-data";
 import { ArticleThumbnail } from "@/components/article-thumbnail";
@@ -84,11 +84,10 @@ export function ClusterView({
               {stories.map((s) => {
                 const src = sourceForStory(s.sourceId, s.url);
                 return (
-                  <a
+                  <Link
                     key={s.id}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    to="/stories/$clusterId/$articleId"
+                    params={{ clusterId: cluster.id, articleId: s.id }}
                     className="flex gap-3 rounded-md border bg-background p-3 hover:bg-secondary/40"
                   >
                     <ArticleThumbnail
