@@ -24,12 +24,21 @@ Branding constants live in [`src/lib/brand.ts`](src/lib/brand.ts).
 
 ## Deploy (Cloudflare Workers)
 
-Requires **Node 22.12+** (Wrangler and TanStack Start enforce this).
+Requires **Node 22.12+** (Wrangler and TanStack Start enforce this). Use **npm only** — do not set `BUN_VERSION` (a `bunfig.toml` in the repo used to force Bun installs).
 
-1. In Cloudflare → Worker → **Settings → Build**, add build variable: `NODE_VERSION` = `22.12.0`
-2. **Build command:** `npm run build`
-3. **Deploy command:** `npm run deploy` (or default `npx wrangler deploy`)
-4. Add runtime secrets under **Settings → Variables & Secrets** (Supabase, API keys, etc.)
+In Cloudflare → Worker → **Settings → Build**:
+
+| Build variable | Value |
+|----------------|--------|
+| `NODE_VERSION` | `22.12.0` |
+| `SKIP_DEPENDENCY_INSTALL` | `true` |
+
+| Setting | Value |
+|---------|--------|
+| **Build command** | `npm ci && npm run build` |
+| **Deploy command** | `npx wrangler deploy` |
+
+Add runtime secrets under **Variables & Secrets** (Supabase, API keys, etc.).
 
 ## Quick start
 

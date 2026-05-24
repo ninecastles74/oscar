@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 bun.lock
 bun.lockb
+bunfig.toml
 pnpm-lock.yaml
 yarn.lock
 
