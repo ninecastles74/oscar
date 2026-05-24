@@ -8,6 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+bun.lock
+bun.lockb
+pnpm-lock.yaml
+yarn.lock
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
