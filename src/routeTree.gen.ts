@@ -12,7 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as StoriesRouteImport } from './routes/stories'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as MyWritingRouteImport } from './routes/my-writing'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyzeRouteImport } from './routes/analyze'
 import { Route as IndexRouteImport } from './routes/index'
@@ -38,9 +41,24 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PipelineRoute = PipelineRouteImport.update({
   id: '/pipeline',
   path: '/pipeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyWritingRoute = MyWritingRouteImport.update({
+  id: '/my-writing',
+  path: '/my-writing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -93,7 +111,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
+  '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stories': typeof StoriesRouteWithChildren
@@ -108,7 +129,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
+  '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stories': typeof StoriesRouteWithChildren
@@ -124,7 +148,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
+  '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/stories': typeof StoriesRouteWithChildren
@@ -141,7 +168,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analyze'
     | '/dashboard'
+    | '/login'
+    | '/my-writing'
     | '/pipeline'
+    | '/pricing'
     | '/settings'
     | '/sitemap.xml'
     | '/stories'
@@ -156,7 +186,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analyze'
     | '/dashboard'
+    | '/login'
+    | '/my-writing'
     | '/pipeline'
+    | '/pricing'
     | '/settings'
     | '/sitemap.xml'
     | '/stories'
@@ -171,7 +204,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analyze'
     | '/dashboard'
+    | '/login'
+    | '/my-writing'
     | '/pipeline'
+    | '/pricing'
     | '/settings'
     | '/sitemap.xml'
     | '/stories'
@@ -187,7 +223,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyzeRoute: typeof AnalyzeRouteWithChildren
   DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
+  MyWritingRoute: typeof MyWritingRoute
   PipelineRoute: typeof PipelineRoute
+  PricingRoute: typeof PricingRoute
   SettingsRoute: typeof SettingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   StoriesRoute: typeof StoriesRouteWithChildren
@@ -220,11 +259,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pipeline': {
       id: '/pipeline'
       path: '/pipeline'
       fullPath: '/pipeline'
       preLoaderRoute: typeof PipelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-writing': {
+      id: '/my-writing'
+      path: '/my-writing'
+      fullPath: '/my-writing'
+      preLoaderRoute: typeof MyWritingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -319,7 +379,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyzeRoute: AnalyzeRouteWithChildren,
   DashboardRoute: DashboardRoute,
+  LoginRoute: LoginRoute,
+  MyWritingRoute: MyWritingRoute,
   PipelineRoute: PipelineRoute,
+  PricingRoute: PricingRoute,
   SettingsRoute: SettingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   StoriesRoute: StoriesRouteWithChildren,

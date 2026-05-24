@@ -11,5 +11,11 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
+    // Lovable merges `**/server/**` into client deny rules; allow createServerFn entrypoints.
+    importProtection: {
+      client: {
+        excludeFiles: ["**/node_modules/**", "**/server/**/functions.ts"],
+      },
+    },
   },
 });
