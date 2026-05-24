@@ -1,4 +1,5 @@
 import type { ArticleIngestMetadata, Category, NewsArticle } from "@/types/news-platform";
+import { normalizeImageUrl } from "@/lib/article-image";
 import { canonicalizeUrl, extractDomain } from "./utils/url";
 import { contentHash, stableArticleId } from "./utils/text";
 import type { RawArticle } from "./providers/types";
@@ -90,7 +91,7 @@ export async function normalizeArticle(raw: RawArticle): Promise<NewsArticle | n
     sourceId: raw.sourceId,
     author: raw.author,
     publishedAt,
-    imageUrl: raw.imageUrl,
+    imageUrl: normalizeImageUrl(raw.imageUrl),
     originalApiProvider: raw.provider,
     category: coerceCategory(String(raw.category)),
     country: raw.country,

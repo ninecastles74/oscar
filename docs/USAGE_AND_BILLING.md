@@ -5,9 +5,6 @@
 Only user-initiated flows:
 
 - **Ask Oscar** (`/analyze`) — URL or pasted article
-- **Oscar My Writing** (`/my-writing`) — your own draft
-
-Both share the same daily limit for your tier.
 
 ## What does NOT count
 

@@ -13,6 +13,9 @@ export const STORIES: Story[] = CLUSTERS.flatMap((c, ci) =>
     sourceId: SOURCES[(ci + si) % SOURCES.length].id,
     url: `https://${SOURCES[(ci + si) % SOURCES.length].domain}/article/${sid}`,
     category: c.category,
+    imageUrl: c.imageUrl
+      ? `https://picsum.photos/seed/${sid}/160/120`
+      : undefined,
   })),
 );
 

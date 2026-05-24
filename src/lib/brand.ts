@@ -24,8 +24,6 @@ export const OSCAR = {
   evidence: "Oscar Evidence Weights",
   reliability: "Oscar Reliability",
   pipeline: "Oscar Pipeline",
-  myWriting: "Oscar My Writing",
-  myWritingScore: "My Oscar Score",
   pricing: "Oscar Plans",
 } as const;
 

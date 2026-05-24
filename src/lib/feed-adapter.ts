@@ -1,5 +1,6 @@
-import type { StoryCluster } from "@/types/news-platform";
-import type { Cluster } from "@/lib/mock-data/types";
+import type { NewsArticle, StoryCluster } from "@/types/news-platform";
+import type { Cluster, Story } from "@/lib/mock-data/types";
+import { normalizeImageUrl } from "@/lib/article-image";
 
 /** Map live feed cluster to UI list shape (Top 100 table). */
 export function storyClusterToUiCluster(c: StoryCluster, index: number): Cluster {
@@ -13,8 +14,25 @@ export function storyClusterToUiCluster(c: StoryCluster, index: number): Cluster
     disputedClaims: c.disputedClaims ?? 0,
     missingContext: c.missingContext ?? 0,
     publishedAt: c.publishedAt,
-    storyIds: c.articleIds ?? [],
-    claimIds: [],
+    imageUrl: normalizeImageUrl(c.imageUrl),
+    storyIds: c.articleIds ?? c.storyIds ?? [],
+    claimIds: c.claimIds ?? [],
     trendingScore: c.trendingScore ?? 100 - index,
+  };
+}
+
+/** Map ingested article to coverage list item on cluster detail. */
+export function articleToUiStory(article: NewsArticle, clusterId: string): Story {
+  const domain = article.sourceDomain.replace(/^www\./, "");
+  return {
+    id: article.id || article.url,
+    clusterId,
+    headline: article.title,
+    summary: article.description.slice(0, 280),
+    publishedAt: article.publishedAt,
+    sourceId: article.sourceId ?? domain,
+    url: article.url,
+    category: article.category,
+    imageUrl: normalizeImageUrl(article.imageUrl),
   };
 }

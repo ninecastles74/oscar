@@ -19,6 +19,7 @@ export const CLUSTERS: Cluster[] = Array.from({ length: 30 }, (_, i) => {
     storyIds: Array.from({ length: storyCount }, (_, j) => `c${i + 1}-s${j + 1}`),
     claimIds: pick(CLAIMS_POOL, 4 + (i % 3), i).map((_, j) => `c${i + 1}-cl${j + 1}`),
     trendingScore: Math.floor(r() * 100),
+    imageUrl: `https://picsum.photos/seed/oscar-c${i + 1}/400/240`,
   };
 });
 

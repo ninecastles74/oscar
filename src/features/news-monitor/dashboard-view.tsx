@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowUpRight, FileSearch, TrendingUp } from "lucide-react";
 import { CLUSTERS, SOURCES } from "@/lib/mock-data";
+import { ArticleThumbnail } from "@/components/article-thumbnail";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { StatTile } from "@/components/stat-tile";
 import { SourceBadge } from "@/features/sources/source-badge";
@@ -56,6 +57,7 @@ export function DashboardView() {
                 <span className="mt-0.5 w-6 font-mono text-xs text-muted-foreground">
                   {String(i + 1).padStart(2, "0")}
                 </span>
+                <ArticleThumbnail src={c.imageUrl} alt="" className="h-14 w-20 shrink-0 rounded-md object-cover" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
                     <span>{c.category}</span>

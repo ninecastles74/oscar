@@ -5,7 +5,6 @@ export function AnalyzerFormView() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <UserAnalysisForm
-        mode="article"
         badge={OSCAR.ask}
         title={OSCAR.analysis}
         description={`Paste a URL or the full article text. ${BRAND_NAME} will extract claims, gather evidence from approved sources, and return a full ${OSCAR.analysis.toLowerCase()} report.`}

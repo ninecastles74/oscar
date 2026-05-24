@@ -1,4 +1,5 @@
 import type { Category, NewsArticle, StoryCluster } from "@/types/news-platform";
+import { pickClusterImageUrl } from "@/lib/article-image";
 import { titleSimilarity } from "./utils/text";
 import { reliabilityForDomain } from "./source-registry";
 import { extractDomain } from "./utils/url";
@@ -130,6 +131,7 @@ export function clusterArticles(articles: NewsArticle[]): {
       disputedClaims: 0,
       missingContext: 0,
       publishedAt: latest,
+      imageUrl: pickClusterImageUrl(members, lead),
       articleIds,
       storyIds: articleIds,
       claimIds: [],

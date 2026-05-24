@@ -284,6 +284,9 @@ export interface StoryCluster {
   /** ISO 8601 timestamp of the latest article in the cluster. */
   publishedAt: string;
 
+  /** Hero image from the lead article or best available member with `imageUrl`. */
+  imageUrl?: string;
+
   /** IDs of articles in this cluster (canonical name). */
   articleIds?: string[];
 

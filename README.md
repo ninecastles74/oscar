@@ -58,7 +58,7 @@ See [docs/SUPABASE.md](docs/SUPABASE.md) for database setup.
 ## Usage & scheduling
 
 - **Top 100 news** ingests every **8 hours** and runs **full multi-model cluster analysis** only on **new** articles; stories stay in the feed until they age out of the Top 100 slots (by date/rank). Does not use user AI quota.
-- **Ask Oscar** (`/analyze`) and **My Writing** (`/my-writing`) share a daily AI limit (default **5/day** free; Pro/Team when signed in).
+- **Ask Oscar** (`/analyze`) has a daily AI limit (default **5/day** free; Pro/Team when signed in).
 - **Sign in** (`/login`) is only required for paid tiers ([`/pricing`](pricing)).
 - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (same as Supabase dashboard anon key) for browser login.
 

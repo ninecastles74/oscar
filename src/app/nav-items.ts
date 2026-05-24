@@ -7,7 +7,6 @@ export const NAV_ITEMS = [
   { to: "/dashboard", label: OSCAR.signals },
   { to: "/stories", label: "Top 100" },
   { to: "/analyze", label: OSCAR.ask },
-  { to: "/my-writing", label: OSCAR.myWriting },
   { to: "/pricing", label: "Plans" },
   { to: "/login", label: "Sign in" },
 ] as const;

@@ -14,7 +14,6 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PipelineRouteImport } from './routes/pipeline'
-import { Route as MyWritingRouteImport } from './routes/my-writing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyzeRouteImport } from './routes/analyze'
@@ -49,11 +48,6 @@ const PricingRoute = PricingRouteImport.update({
 const PipelineRoute = PipelineRouteImport.update({
   id: '/pipeline',
   path: '/pipeline',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MyWritingRoute = MyWritingRouteImport.update({
-  id: '/my-writing',
-  path: '/my-writing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -112,7 +106,6 @@ export interface FileRoutesByFullPath {
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
@@ -130,7 +123,6 @@ export interface FileRoutesByTo {
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
@@ -149,7 +141,6 @@ export interface FileRoutesById {
   '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/my-writing': typeof MyWritingRoute
   '/pipeline': typeof PipelineRoute
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
@@ -169,7 +160,6 @@ export interface FileRouteTypes {
     | '/analyze'
     | '/dashboard'
     | '/login'
-    | '/my-writing'
     | '/pipeline'
     | '/pricing'
     | '/settings'
@@ -187,7 +177,6 @@ export interface FileRouteTypes {
     | '/analyze'
     | '/dashboard'
     | '/login'
-    | '/my-writing'
     | '/pipeline'
     | '/pricing'
     | '/settings'
@@ -205,7 +194,6 @@ export interface FileRouteTypes {
     | '/analyze'
     | '/dashboard'
     | '/login'
-    | '/my-writing'
     | '/pipeline'
     | '/pricing'
     | '/settings'
@@ -224,7 +212,6 @@ export interface RootRouteChildren {
   AnalyzeRoute: typeof AnalyzeRouteWithChildren
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
-  MyWritingRoute: typeof MyWritingRoute
   PipelineRoute: typeof PipelineRoute
   PricingRoute: typeof PricingRoute
   SettingsRoute: typeof SettingsRoute
@@ -271,13 +258,6 @@ declare module '@tanstack/react-router' {
       path: '/pipeline'
       fullPath: '/pipeline'
       preLoaderRoute: typeof PipelineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/my-writing': {
-      id: '/my-writing'
-      path: '/my-writing'
-      fullPath: '/my-writing'
-      preLoaderRoute: typeof MyWritingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -380,7 +360,6 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyzeRoute: AnalyzeRouteWithChildren,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
-  MyWritingRoute: MyWritingRoute,
   PipelineRoute: PipelineRoute,
   PricingRoute: PricingRoute,
   SettingsRoute: SettingsRoute,

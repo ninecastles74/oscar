@@ -1,15 +1,21 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, GitCompare } from "lucide-react";
-import type { Cluster } from "@/lib/mock-data";
-import { claimsForCluster, sourceById, storiesForCluster } from "@/lib/mock-data";
+import type { Cluster, Story } from "@/lib/mock-data/types";
+import { claimsForCluster, sourceForStory } from "@/lib/mock-data";
+import { ArticleThumbnail } from "@/components/article-thumbnail";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { OSCAR } from "@/lib/brand";
 import { StatTile } from "@/components/stat-tile";
 import { ClaimPanel } from "@/features/claims/claim-panel";
 import { SourceBadge } from "@/features/sources/source-badge";
 
-export function ClusterView({ cluster }: { cluster: Cluster }) {
-  const stories = storiesForCluster(cluster.id);
+export function ClusterView({
+  cluster,
+  stories,
+}: {
+  cluster: Cluster;
+  stories: Story[];
+}) {
   const claims = claimsForCluster(cluster.id);
 
   return (
@@ -23,7 +29,17 @@ export function ClusterView({ cluster }: { cluster: Cluster }) {
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             {cluster.category} · cluster {cluster.id}
           </div>
-          <h1 className="mt-2 font-serif text-4xl font-semibold leading-tight tracking-tight">{cluster.title}</h1>
+          {cluster.imageUrl && (
+            <div className="mt-4 overflow-hidden rounded-xl border">
+              <ArticleThumbnail
+                src={cluster.imageUrl}
+                alt=""
+                className="h-48 w-full object-cover sm:h-56"
+                fallbackClassName="flex h-48 w-full items-center justify-center bg-muted sm:h-56"
+              />
+            </div>
+          )}
+          <h1 className="mt-4 font-serif text-4xl font-semibold leading-tight tracking-tight">{cluster.title}</h1>
           <p className="mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground">{cluster.summary}</p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -66,14 +82,27 @@ export function ClusterView({ cluster }: { cluster: Cluster }) {
             </div>
             <div className="space-y-2">
               {stories.map((s) => {
-                const src = sourceById(s.sourceId);
+                const src = sourceForStory(s.sourceId, s.url);
                 return (
-                  <a key={s.id} href={s.url} className="block rounded-md border bg-background p-3 hover:bg-secondary/40">
-                    <div className="flex items-center justify-between">
-                      <SourceBadge source={src} small />
-                      <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                  <a
+                    key={s.id}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex gap-3 rounded-md border bg-background p-3 hover:bg-secondary/40"
+                  >
+                    <ArticleThumbnail
+                      src={s.imageUrl}
+                      alt=""
+                      className="h-16 w-24 shrink-0 rounded-md object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <SourceBadge source={src} small />
+                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-snug text-foreground/80">{s.summary}</p>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs leading-snug text-foreground/80">{s.summary}</p>
                   </a>
                 );
               })}

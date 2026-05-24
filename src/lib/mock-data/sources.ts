@@ -22,3 +22,32 @@ export const SOURCES: Source[] = [
 export function sourceById(id: string): Source {
   return SOURCES.find((s) => s.id === id)!;
 }
+
+/** Resolve mock source by id, domain, or article URL (live feed uses domain ids). */
+export function sourceForStory(sourceId: string, articleUrl?: string): Source {
+  const byId = SOURCES.find((s) => s.id === sourceId);
+  if (byId) return byId;
+
+  let domain = sourceId;
+  if (articleUrl) {
+    try {
+      domain = new URL(articleUrl).hostname.replace(/^www\./, "");
+    } catch {
+      /* keep sourceId */
+    }
+  }
+
+  const byDomain = SOURCES.find(
+    (s) => s.domain === domain || domain.endsWith(`.${s.domain}`) || domain.includes(s.domain),
+  );
+  if (byDomain) return byDomain;
+
+  return {
+    id: sourceId,
+    name: domain,
+    domain,
+    bias: "center",
+    reliability: 70,
+    approved: true,
+  };
+}

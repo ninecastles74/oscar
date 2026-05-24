@@ -42,6 +42,7 @@ export interface Story {
   sourceId: string;
   url: string;
   category: string;
+  imageUrl?: string;
 }
 
 export interface Cluster {
@@ -57,4 +58,5 @@ export interface Cluster {
   storyIds: string[];
   claimIds: string[];
   trendingScore: number;
+  imageUrl?: string;
 }

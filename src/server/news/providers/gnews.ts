@@ -1,5 +1,6 @@
 import type { NewsIngestionEnv } from "../env";
 import { IngestionError } from "../errors";
+import { normalizeImageUrl } from "@/lib/article-image";
 import { normalizeArticles } from "../normalize";
 import { fetchWithRateLimit } from "./http";
 import type { ProviderContext, ProviderFetchResult, RawArticle } from "./types";
@@ -62,7 +63,7 @@ export async function fetchGNews(
       sourceName: a.source?.name ?? "Unknown",
       sourceDomain: a.source?.url ?? a.url!,
       publishedAt: a.publishedAt ?? new Date().toISOString(),
-      imageUrl: a.image,
+      imageUrl: normalizeImageUrl(a.image),
       category: "General",
       language: ctx.language,
       fullText: a.content,

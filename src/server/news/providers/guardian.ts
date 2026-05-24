@@ -1,5 +1,6 @@
 import type { NewsIngestionEnv } from "../env";
 import { IngestionError } from "../errors";
+import { normalizeImageUrl } from "@/lib/article-image";
 import { normalizeArticles, coerceCategory } from "../normalize";
 import { fetchWithRateLimit } from "./http";
 import type { ProviderContext, ProviderFetchResult, RawArticle } from "./types";
@@ -70,7 +71,7 @@ export async function fetchGuardian(
       sourceName: "The Guardian",
       sourceDomain: "theguardian.com",
       publishedAt: r.fields?.lastModified ?? new Date().toISOString(),
-      imageUrl: r.fields?.thumbnail,
+      imageUrl: normalizeImageUrl(r.fields?.thumbnail),
       category: coerceCategory(r.sectionName ?? "General"),
       language: ctx.language,
       provider,

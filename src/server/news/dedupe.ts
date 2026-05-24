@@ -1,4 +1,5 @@
 import type { NewsArticle } from "@/types/news-platform";
+import { normalizeImageUrl } from "@/lib/article-image";
 import { canonicalizeUrl, extractDomain, urlsLikelySame } from "./utils/url";
 import { titleSimilarity } from "./utils/text";
 import { reliabilityForDomain } from "./source-registry";
@@ -22,8 +23,11 @@ function hoursBetween(a: string, b: string): number {
 function pickKeeper(a: NewsArticle, b: NewsArticle): NewsArticle {
   const ra = reliabilityForDomain(a.sourceDomain);
   const rb = reliabilityForDomain(b.sourceDomain);
-  if (ra !== rb) return ra > rb ? a : b;
-  return new Date(a.publishedAt).getTime() >= new Date(b.publishedAt).getTime() ? a : b;
+  let keeper: NewsArticle;
+  if (ra !== rb) keeper = ra > rb ? a : b;
+  else keeper = new Date(a.publishedAt).getTime() >= new Date(b.publishedAt).getTime() ? a : b;
+  const imageUrl = normalizeImageUrl(keeper.imageUrl ?? a.imageUrl ?? b.imageUrl);
+  return imageUrl ? { ...keeper, imageUrl } : keeper;
 }
 
 /**

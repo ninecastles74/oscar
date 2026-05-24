@@ -60,7 +60,7 @@ export function PricingView() {
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
           Top 100 news and {OSCAR.monitor} refresh every 8 hours on our schedule — no quota cost.
-          Ask Oscar and {OSCAR.myWriting} share your daily AI allowance.
+          Ask Oscar uses your daily AI allowance.
         </p>
         {signedIn ? (
           <button
@@ -100,10 +100,6 @@ export function PricingView() {
               <li className="flex gap-2">
                 <Check className="h-4 w-4 shrink-0 text-success" />
                 {OSCAR.ask}
-              </li>
-              <li className="flex gap-2">
-                <Check className="h-4 w-4 shrink-0 text-success" />
-                {OSCAR.myWriting}
               </li>
               <li className="flex gap-2">
                 <Check className="h-4 w-4 shrink-0 text-success" />

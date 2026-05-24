@@ -1,4 +1,5 @@
 import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/news-platform";
+import { pickClusterImageUrl } from "@/lib/article-image";
 import type { AnalyzedArticleBundle } from "../consensus/types";
 import { rankTopClusters } from "./rank";
 import { saveClusterArticles, saveStoryConsensus, getStoryConsensus } from "../consensus/store";
@@ -88,9 +89,12 @@ export function mergeIngestIntoFeed(ingest: IngestNewsResult): FeedMergeResult {
   for (const cluster of ingest.clusters) {
     const existing = state.clusters.get(cluster.id);
     const publishedAt = cluster.publishedAt || ts;
+    const members = ingest.articles.filter((a) => a.clusterId === cluster.id);
+    const imageUrl = pickClusterImageUrl(members) ?? cluster.imageUrl ?? existing?.imageUrl;
+    const withImage = imageUrl ? { ...cluster, imageUrl } : cluster;
     if (!existing) {
       state.clusters.set(cluster.id, {
-        ...cluster,
+        ...withImage,
         firstSeenAt: ts,
         lastSeenAt: publishedAt,
         enteredFeedAt: ts,
@@ -98,11 +102,10 @@ export function mergeIngestIntoFeed(ingest: IngestNewsResult): FeedMergeResult {
     } else {
       state.clusters.set(cluster.id, {
         ...existing,
-        ...cluster,
+        ...withImage,
         lastSeenAt: publishedAt,
       });
     }
-    const members = ingest.articles.filter((a) => a.clusterId === cluster.id);
     if (members.length >= 2) {
       saveClusterArticles(cluster.id, members);
     }

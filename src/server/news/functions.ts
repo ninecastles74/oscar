@@ -4,7 +4,12 @@ import type { ApiProviderId } from "@/types/news-platform";
 import { ingestNews, type IngestNewsResult } from "./ingest";
 import { getNewsIngestionEnv, isProviderConfigured } from "./env";
 import { getRssRegistrySummary } from "./rss/ingest";
-import { getTop100Clusters, getFeedMeta, getStoredCluster } from "./feed-store";
+import {
+  getClusterArticlesFromStore,
+  getTop100Clusters,
+  getFeedMeta,
+  getStoredCluster,
+} from "./feed-store";
 import { MAJOR_US_WORLD_SOURCES } from "./major-publishers";
 import { runScheduledNewsPipeline } from "../jobs/news/scheduled-pipeline";
 
@@ -102,4 +107,16 @@ export const getFeedCluster = createServerFn({ method: "GET" })
     const cluster = getStoredCluster(data.clusterId);
     if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     return { cluster };
+  });
+
+/** Cluster plus member articles (includes image URLs from APIs/RSS). */
+export const getFeedClusterDetail = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z.object({ clusterId: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const cluster = getStoredCluster(data.clusterId);
+    if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
+    const articles = getClusterArticlesFromStore(data.clusterId);
+    return { cluster, articles };
   });

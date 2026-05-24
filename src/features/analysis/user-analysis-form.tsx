@@ -1,33 +1,24 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { FileText, Link2, Loader2, Sparkles } from "lucide-react";
-import {
-  submitManualAnalysis,
-  submitPersonalWritingAnalysis,
-} from "@/server/analysis/functions";
+import { submitManualAnalysis } from "@/server/analysis/functions";
 import { getAiUsageQuota } from "@/server/usage/functions";
 import { getAccessToken } from "@/lib/auth-session";
 import { getAnonymousId } from "@/lib/anonymous-id";
 import { QuotaBanner, type QuotaInfo } from "./quota-banner";
 
-export type UserAnalysisMode = "article" | "writing";
-
 export function UserAnalysisForm({
-  mode,
   badge,
   title,
   description,
 }: {
-  mode: UserAnalysisMode;
   badge: string;
   title: string;
   description: string;
 }) {
   const nav = useNavigate();
-  const personal = mode === "writing";
-  const [tab, setTab] = useState<"url" | "text">(personal ? "text" : "url");
+  const [tab, setTab] = useState<"url" | "text">("url");
   const [value, setValue] = useState("");
-  const [writingTitle, setWritingTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
@@ -52,20 +43,9 @@ export function UserAnalysisForm({
       const anonymousId = getAnonymousId();
       const base = { accessToken, anonymousId };
 
-      const result = personal
-        ? await submitPersonalWritingAnalysis({
-            data: {
-              ...base,
-              text: value.trim(),
-              title: writingTitle.trim() || undefined,
-            },
-          })
-        : await submitManualAnalysis({
-            data:
-              tab === "url"
-                ? { ...base, url: value.trim(), kind: "manual_article" }
-                : { ...base, text: value.trim(), kind: "manual_article" },
-          });
+      const result = await submitManualAnalysis({
+        data: tab === "url" ? { ...base, url: value.trim() } : { ...base, text: value.trim() },
+      });
 
       if ("error" in result && result.error) {
         setError(result.error.message);
@@ -107,45 +87,33 @@ export function UserAnalysisForm({
         </p>
         <p className="mx-auto mt-2 max-w-xl text-xs text-muted-foreground">
           Top 100 news refreshes every 8 hours with full Oscar cluster analysis (multi-model) for new
-          articles only — that does not use your daily quota. Only Ask Oscar and My Writing count toward your limit.
+          articles only — that does not use your daily quota. Only Ask Oscar counts toward your limit.
         </p>
       </div>
 
       <form onSubmit={submit} className="mt-10 rounded-2xl border bg-card p-6 shadow-sm">
-        {!personal && (
-          <div className="mb-4 flex gap-1 rounded-lg border bg-secondary/40 p-1">
-            {[
-              { k: "url" as const, label: "URL", Icon: Link2 },
-              { k: "text" as const, label: "Paste text", Icon: FileText },
-            ].map(({ k, label, Icon }) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => {
-                  setTab(k);
-                  setError(null);
-                }}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  tab === k ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Icon className="h-4 w-4" /> {label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="mb-4 flex gap-1 rounded-lg border bg-secondary/40 p-1">
+          {[
+            { k: "url" as const, label: "URL", Icon: Link2 },
+            { k: "text" as const, label: "Paste text", Icon: FileText },
+          ].map(({ k, label, Icon }) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => {
+                setTab(k);
+                setError(null);
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                tab === k ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
 
-        {personal && (
-          <input
-            type="text"
-            value={writingTitle}
-            onChange={(e) => setWritingTitle(e.target.value)}
-            placeholder="Title of your piece (optional)"
-            className="mb-4 w-full rounded-md border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        )}
-
-        {!personal && tab === "url" ? (
+        {tab === "url" ? (
           <input
             type="url"
             required
@@ -160,11 +128,7 @@ export function UserAnalysisForm({
             minLength={80}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={
-              personal
-                ? "Paste your essay, op-ed, or draft here (min. 80 characters)…"
-                : "Paste full article text here…"
-            }
+            placeholder="Paste full article text here…"
             rows={12}
             className="w-full resize-none rounded-md border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
@@ -178,9 +142,7 @@ export function UserAnalysisForm({
 
         <div className="mt-5 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            {personal
-              ? "Your writing is analyzed privately and counts toward your daily Oscar quota."
-              : "URL mode uses metadata and excerpts unless licensed. Paste text for full analysis."}
+            URL mode uses metadata and excerpts unless licensed. Paste text for full analysis.
           </p>
           <button
             type="submit"

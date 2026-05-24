@@ -23,27 +23,16 @@ const submitSchema = z
     title: z.string().max(300).optional(),
     userNotes: z.string().max(2000).optional(),
     language: z.string().min(2).max(5).optional(),
-    kind: z.enum(["manual_article", "personal_writing"]).optional(),
     ...actorFields,
   })
   .refine((d) => !!d.url?.trim() !== !!d.text?.trim(), {
     message: "Provide exactly one of url or text",
   });
 
-const personalSubmitSchema = z.object({
-  text: z.string().min(80).max(100_000),
-  title: z.string().max(300).optional(),
-  userNotes: z.string().max(2000).optional(),
-  language: z.string().min(2).max(5).optional(),
-  ...actorFields,
-});
-
 const idSchema = z.object({ requestId: z.string().min(1) });
 
-async function runGatedUserAnalysis(
-  data: z.infer<typeof submitSchema> | z.infer<typeof personalSubmitSchema>,
-  kind: "manual_article" | "personal_writing",
-) {
+async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
+  const kind = "manual_article" as const;
   const actor = await resolveActor({
     accessToken: "accessToken" in data ? data.accessToken : undefined,
     anonymousId: data.anonymousId,
@@ -67,7 +56,6 @@ async function runGatedUserAnalysis(
     title: data.title,
     userNotes: data.userNotes,
     language: data.language,
-    kind,
     userId: actor.userId,
     analysisTrigger: "user",
   });
@@ -96,33 +84,7 @@ export const submitManualAnalysis = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => submitSchema.parse(data))
   .handler(async ({ data }) => {
     try {
-      if (data.kind === "personal_writing") {
-        return runGatedUserAnalysis(
-          { ...data, url: undefined },
-          "personal_writing",
-        );
-      }
-      return runGatedUserAnalysis(data, "manual_article");
-    } catch (err) {
-      if (err instanceof AnalysisError) {
-        return {
-          error: {
-            code: err.code,
-            message: err.message,
-            statusCode: err.statusCode,
-          },
-        };
-      }
-      throw err;
-    }
-  });
-
-/** Analyze user's own writing for an Oscar score (same quota as Ask Oscar). */
-export const submitPersonalWritingAnalysis = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => personalSubmitSchema.parse(data))
-  .handler(async ({ data }) => {
-    try {
-      return runGatedUserAnalysis(data, "personal_writing");
+      return runGatedUserAnalysis(data);
     } catch (err) {
       if (err instanceof AnalysisError) {
         return {

@@ -18,16 +18,11 @@ import {
 } from "./store";
 import type { ManualAnalysisResponse, ParsedArticleInput, PipelineArticleContext } from "./types";
 import { fetchArticleFromUrl } from "./url-fetch";
-import type { UserAnalysisKind } from "../usage/types";
-
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function parsedFromText(
-  text: string,
-  opts: { url?: string; title?: string; personal?: boolean },
-): ParsedArticleInput {
+function parsedFromText(text: string, opts: { url?: string; title?: string }): ParsedArticleInput {
   const trimmed = text.trim();
   if (trimmed.length < 80) {
     throw new AnalysisError(
@@ -36,21 +31,18 @@ function parsedFromText(
     );
   }
   const firstLine = trimmed.split("\n")[0]?.trim() ?? "";
-  const defaultTitle = opts.personal ? "Personal writing" : "Pasted article analysis";
   const title =
     opts.title?.trim() ||
-    (firstLine.length > 10 && firstLine.length < 200 ? firstLine : defaultTitle);
+    (firstLine.length > 10 && firstLine.length < 200 ? firstLine : "Pasted article analysis");
 
   return {
     title: title.slice(0, 300),
-    url: opts.url ?? (opts.personal ? `personal://writing/${Date.now()}` : "manual://pasted-text"),
+    url: opts.url ?? "manual://pasted-text",
     summary: trimmed.slice(0, 500),
     analysisText: trimmed.slice(0, 50_000),
     language: "en",
     contentRights: "user_provided",
-    rightsNote: opts.personal
-      ? "User-provided original writing analyzed with their consent."
-      : "User-provided text analyzed directly with their consent.",
+    rightsNote: "User-provided text analyzed directly with their consent.",
   };
 }
 
@@ -60,25 +52,15 @@ export async function runManualAnalysis(input: {
   title?: string;
   userNotes?: string;
   language?: string;
-  kind?: UserAnalysisKind;
   userId?: string;
   analysisTrigger?: AnalysisTrigger;
 }): Promise<ManualAnalysisResponse> {
-  const kind = input.kind ?? "manual_article";
   const trigger = input.analysisTrigger ?? "user";
-  const personal = kind === "personal_writing";
 
   const hasUrl = !!input.url?.trim();
   const hasText = !!input.text?.trim();
 
-  if (personal) {
-    if (!hasText || hasUrl) {
-      throw new AnalysisError(
-        "VALIDATION_ERROR",
-        "Personal writing analysis requires pasted text only (no URL).",
-      );
-    }
-  } else if (hasUrl === hasText) {
+  if (hasUrl === hasText) {
     throw new AnalysisError("VALIDATION_ERROR", "Provide exactly one of url or text.");
   }
 
@@ -100,7 +82,7 @@ export async function runManualAnalysis(input: {
   const request: UserAnalysisRequest = {
     id: requestId,
     userId: input.userId,
-    type: personal ? "manual_text" : hasUrl ? "manual_url" : "manual_text",
+    type: hasUrl ? "manual_url" : "manual_text",
     submission,
     status: "processing",
     progress: 10,
@@ -117,10 +99,7 @@ export async function runManualAnalysis(input: {
       parsed = await fetchArticleFromUrl(input.url!.trim());
       if (input.title) parsed.title = input.title;
     } else {
-      parsed = parsedFromText(input.text!, {
-        title: input.title,
-        personal,
-      });
+      parsed = parsedFromText(input.text!, { title: input.title });
     }
 
     if (parsed.analysisText.length < 40) {

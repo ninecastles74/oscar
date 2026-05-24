@@ -1,5 +1,6 @@
 import type { NewsIngestionEnv } from "../env";
 import { IngestionError } from "../errors";
+import { normalizeImageUrl } from "@/lib/article-image";
 import { normalizeArticles } from "../normalize";
 import { fetchWithRateLimit } from "./http";
 import type { ProviderContext, ProviderFetchResult, RawArticle } from "./types";
@@ -64,7 +65,7 @@ export async function fetchNewsApi(
       sourceDomain: a.url!,
       author: a.author ?? undefined,
       publishedAt: a.publishedAt ?? new Date().toISOString(),
-      imageUrl: a.urlToImage ?? undefined,
+      imageUrl: normalizeImageUrl(a.urlToImage),
       category: "General",
       language: ctx.language,
       country: ctx.country.toUpperCase(),
