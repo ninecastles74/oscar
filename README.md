@@ -22,6 +22,15 @@ Branding constants live in [`src/lib/brand.ts`](src/lib/brand.ts).
 - Supabase PostgreSQL + Prisma
 - Optional: NewsAPI, GNews, Guardian, RSS ingestion
 
+## Deploy (Cloudflare Workers)
+
+Requires **Node 22.12+** (Wrangler and TanStack Start enforce this).
+
+1. In Cloudflare → Worker → **Settings → Build**, add build variable: `NODE_VERSION` = `22.12.0`
+2. **Build command:** `npm run build`
+3. **Deploy command:** `npm run deploy` (or default `npx wrangler deploy`)
+4. Add runtime secrets under **Settings → Variables & Secrets** (Supabase, API keys, etc.)
+
 ## Quick start
 
 ```bash
