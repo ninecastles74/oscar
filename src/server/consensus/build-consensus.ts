@@ -10,6 +10,7 @@ import {
   calculateConsensusScores,
 } from "./score-calculator";
 import type { StoryConsensusInput } from "./types";
+import { buildConsensusFindingsSummary } from "@/lib/consensus-findings-summary";
 
 /**
  * Story consensus engine — compare multiple articles on the same event.
@@ -33,7 +34,12 @@ export function buildStoryConsensus(input: StoryConsensusInput): StoryConsensusR
       `${buildDisputedClaims(alignedGroups).length} disputed, ` +
       `${omittedContext.length} context gap(s) identified.`;
 
-  return {
+  const overlappingClaims = buildOverlappingClaims(alignedGroups);
+  const disputedClaims = buildDisputedClaims(alignedGroups);
+  const emotionalFramingDifferences = analyzeEmotionalFraming(articles);
+  const narrativeDifferences = analyzeNarrativeDifferences(articles, alignedGroups);
+
+  const reportBody = {
     clusterId,
     title,
     summary,
@@ -43,12 +49,17 @@ export function buildStoryConsensus(input: StoryConsensusInput): StoryConsensusR
     disputeScore: scores.disputeScore,
     uncertaintyScore: scores.uncertaintyScore,
     storyConfidence: scores.storyConfidence,
-    overlappingClaims: buildOverlappingClaims(alignedGroups),
-    disputedClaims: buildDisputedClaims(alignedGroups),
+    overlappingClaims,
+    disputedClaims,
     omittedContext,
-    emotionalFramingDifferences: analyzeEmotionalFraming(articles),
-    narrativeDifferences: analyzeNarrativeDifferences(articles, alignedGroups),
+    emotionalFramingDifferences,
+    narrativeDifferences,
+  };
+
+  return {
+    ...reportBody,
     sourceAgreementMap,
     computedAt: new Date().toISOString(),
+    findingsSummary: buildConsensusFindingsSummary(reportBody),
   };
 }

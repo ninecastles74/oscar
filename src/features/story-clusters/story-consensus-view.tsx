@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Check, HelpCircle, X } from "lucide-react";
 import type { StoryConsensusReport, SourceAgreementStance } from "@/types/news-platform";
+import { buildConsensusFindingsSummary } from "@/lib/consensus-findings-summary";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { OSCAR } from "@/lib/brand";
 import { StatTile } from "@/components/stat-tile";
@@ -17,6 +18,8 @@ function StanceIcon({ stance }: { stance: SourceAgreementStance }) {
 
 export function StoryConsensusView({ report }: { report: StoryConsensusReport }) {
   const { sourceAgreementMap: map } = report;
+  const findingsSummary =
+    report.findingsSummary?.trim() || buildConsensusFindingsSummary(report);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
@@ -198,6 +201,16 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
           ))}
         </section>
       </div>
+
+      <section className="mt-10 rounded-xl border bg-card p-6">
+        <h2 className="font-serif text-xl font-semibold">Consensus findings</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Overall read on agreement, dispute, and context across sources
+        </p>
+        <p className="mt-4 max-w-4xl text-base leading-relaxed text-foreground/90">
+          {findingsSummary}
+        </p>
+      </section>
     </main>
   );
 }

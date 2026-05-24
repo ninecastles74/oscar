@@ -1017,6 +1017,9 @@ export interface StoryConsensusReport {
   narrativeDifferences: NarrativeDifference[];
   sourceAgreementMap: SourceAgreementMap;
   computedAt: string;
+
+  /** Closing narrative summarizing consensus findings across the cluster. */
+  findingsSummary?: string;
 }
 
 // ---------------------------------------------------------------------------
