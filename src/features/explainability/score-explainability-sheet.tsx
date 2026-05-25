@@ -26,7 +26,9 @@ export function ScoreExplainabilitySheet({
       ? "Article reliability"
       : explainability.entityType === "source"
         ? "Source reliability"
-        : "Author reliability";
+        : explainability.entityType === "author"
+          ? "Author reliability"
+          : "Story consensus";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

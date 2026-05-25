@@ -536,6 +536,10 @@ export function buildScoreExplainability(input: BuildExplainabilityInput): Score
       if (!author) throw new Error("No author score available for author explainability");
       return buildAuthorExplainability(input, author);
     }
+    case "story":
+      throw new Error(
+        "Story explainability requires a StoryConsensusReport — use buildStoryScoreExplainability from transparency-explainability",
+      );
     default:
       return buildArticleExplainability(input);
   }

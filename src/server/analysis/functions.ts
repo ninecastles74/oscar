@@ -75,6 +75,7 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     report: result.report,
     submission: result.submission,
     reliability: result.reliability,
+    finalIntelligence: result.finalIntelligence,
     quota,
   };
 }
@@ -118,6 +119,7 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
         request: result.request,
         reliability: result.reliability,
         explainability,
+        finalIntelligence: result.finalIntelligence,
       };
     }
 

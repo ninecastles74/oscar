@@ -6,6 +6,8 @@ import { detectConflictingReporting } from "./conflicting-reporting";
 import { detectOmittedContext } from "./omitted-context";
 import { detectTimelineInconsistencies } from "./timeline-inconsistencies";
 import { detectUnsupportedCausalClaims } from "./unsupported-causal";
+import { detectUnsupportedStatistics } from "./unsupported-statistics";
+import { detectEmotionalExaggeration } from "./emotional-exaggeration";
 import { buildAnalysisSummary, computeContradictionScore } from "./score";
 import type { ContradictionAnalysisInput, ContradictionBatchResult, PeerArticleSlice } from "./types";
 
@@ -25,6 +27,8 @@ export function buildContradictionAnalysis(
   const omit = detectOmittedContext(claimId, claimText, evidence);
   const timeline = detectTimelineInconsistencies(claimId, claimText, evidence);
   const causal = detectUnsupportedCausalClaims(claimId, claimText, evidence);
+  const stats = detectUnsupportedStatistics(claimId, claimText, evidence);
+  const framing = detectEmotionalExaggeration(claimId, claimText, evidence, input.peerArticles);
 
   const issues = [
     ...ce.issues,
@@ -33,6 +37,8 @@ export function buildContradictionAnalysis(
     ...omit.issues,
     ...timeline.issues,
     ...causal.issues,
+    ...stats.issues,
+    ...framing.issues,
   ];
 
   const draft = {
@@ -45,6 +51,9 @@ export function buildContradictionAnalysis(
     omittedContext: omit.findings,
     timelineInconsistencies: timeline.inconsistencies,
     unsupportedCausalClaims: causal.findings,
+    unsupportedStatistics: stats.findings,
+    emotionalExaggeration: framing.findings,
+    framingIntensityScore: framing.framingIntensityScore,
     contradictionScore: 0,
     analysisSummary: "",
     computedAt: new Date().toISOString(),

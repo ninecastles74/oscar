@@ -484,7 +484,9 @@ export type ContradictionIssueType =
   | "conflicting_reporting"
   | "omitted_context"
   | "timeline_inconsistency"
-  | "unsupported_causal_claim";
+  | "unsupported_causal_claim"
+  | "unsupported_statistic"
+  | "emotional_exaggeration";
 
 export interface ContradictionIssue {
   issueId: string;
@@ -550,6 +552,24 @@ export interface UnsupportedCausalClaim {
   severity: "warning" | "critical";
 }
 
+export interface UnsupportedStatisticFinding {
+  claimId: string;
+  statisticPhrases: string[];
+  description: string;
+  evidenceIds: string[];
+  severity: "warning" | "critical";
+}
+
+export interface EmotionalExaggerationFinding {
+  claimId: string;
+  intensityScore: number;
+  dominantTones: string[];
+  markerExamples: string[];
+  description: string;
+  sourceIds: string[];
+  severity: "info" | "warning" | "critical";
+}
+
 export interface ContradictionAnalysisReport {
   claimId: string;
   claimText: string;
@@ -560,6 +580,9 @@ export interface ContradictionAnalysisReport {
   omittedContext: OmittedContextFinding[];
   timelineInconsistencies: TimelineInconsistency[];
   unsupportedCausalClaims: UnsupportedCausalClaim[];
+  unsupportedStatistics?: UnsupportedStatisticFinding[];
+  emotionalExaggeration?: EmotionalExaggerationFinding[];
+  framingIntensityScore?: number;
   contradictionScore: number;
   analysisSummary: string;
   computedAt: string;
@@ -1257,6 +1280,21 @@ export interface ManualSubmission {
 }
 
 // ---------------------------------------------------------------------------
+// Final intelligence orchestration (epistemic scores — not objective truth)
+// ---------------------------------------------------------------------------
+
+export interface FinalIntelligenceSummary {
+  finalArticleReliability: number;
+  finalSourceReliability: number | null;
+  finalAuthorReliability: number | null;
+  finalStoryConfidence: number | null;
+  finalUncertaintyLevel: number;
+  disclaimer: string;
+  intelligenceSummary: string;
+  computedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // 13. UserAnalysisRequest — a queued or completed analysis job
 // ---------------------------------------------------------------------------
 
@@ -1293,6 +1331,9 @@ export interface UserAnalysisRequest {
 
   /** Result report. */
   report?: AnalysisReport;
+
+  /** Consolidated epistemic scores from the final intelligence layer. */
+  finalIntelligence?: FinalIntelligenceSummary;
 
   /** Error, if any. */
   error?: string;
@@ -1558,7 +1599,7 @@ export interface TrendGraphResponse {
 // Score explainability (transparency)
 // ---------------------------------------------------------------------------
 
-export type ExplainableEntityType = "article" | "source" | "author";
+export type ExplainableEntityType = "article" | "source" | "author" | "story";
 
 export interface ExplainabilityEvidenceItem {
   id: string;
@@ -1645,6 +1686,11 @@ export interface AnalysisExplainabilityBundle {
   article: ScoreExplainability;
   source: ScoreExplainability | null;
   author: ScoreExplainability | null;
+}
+
+/** Full transparency bundle: article, source, author, and story (cluster) scores. */
+export interface TransparencyExplainabilityBundle extends AnalysisExplainabilityBundle {
+  story: ScoreExplainability | null;
 }
 
 export interface HistoricalScoreSnapshotRecord {

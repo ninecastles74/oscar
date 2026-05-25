@@ -1,12 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Check, HelpCircle, X } from "lucide-react";
-import type { StoryConsensusReport, SourceAgreementStance } from "@/types/news-platform";
+import type {
+  ScoreExplainability,
+  StoryConsensusReport,
+  SourceAgreementStance,
+} from "@/types/news-platform";
+import { StoryScoresPanel } from "@/features/explainability/story-scores-panel";
 import { buildConsensusFindingsSummary } from "@/lib/consensus-findings-summary";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { OSCAR } from "@/lib/brand";
 import { StatTile } from "@/components/stat-tile";
 import { SourceBadge } from "@/features/sources/source-badge";
-import { sourceById } from "@/lib/mock-data";
 
 function StanceIcon({ stance }: { stance: SourceAgreementStance }) {
   if (stance === "support") return <Check className="mx-auto h-4 w-4 text-success" />;
@@ -16,7 +20,13 @@ function StanceIcon({ stance }: { stance: SourceAgreementStance }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-export function StoryConsensusView({ report }: { report: StoryConsensusReport }) {
+export function StoryConsensusView({
+  report,
+  storyExplainability,
+}: {
+  report: StoryConsensusReport;
+  storyExplainability?: ScoreExplainability | null;
+}) {
   const { sourceAgreementMap: map } = report;
   const singleSource = report.sourceCount <= 1 || report.articleCount <= 1;
   const findingsSummary =
@@ -41,14 +51,33 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
           {report.articleCount} articles · {report.sourceCount} sources · computed{" "}
           {new Date(report.computedAt).toLocaleString()}
         </p>
+        <Link
+          to="/compare/$clusterId"
+          params={{ clusterId: report.clusterId }}
+          className="mt-3 inline-block text-sm font-medium text-accent hover:underline"
+        >
+          Open source comparison matrix →
+        </Link>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label={`${OSCAR.consensus} score`} value={`${report.consensusScore}%`} />
-        <StatTile label="Dispute score" value={`${report.disputeScore}%`} />
-        <StatTile label="Uncertainty score" value={`${report.uncertaintyScore}%`} />
-        <StatTile label="Story confidence" value={`${report.storyConfidence}%`} />
-      </div>
+      {storyExplainability ? (
+        <div className="mt-8">
+          <StoryScoresPanel
+            storyExplainability={storyExplainability}
+            consensusScore={report.consensusScore}
+            disputeScore={report.disputeScore}
+            uncertaintyScore={report.uncertaintyScore}
+            storyConfidence={report.storyConfidence}
+          />
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile label={`${OSCAR.consensus} score`} value={`${report.consensusScore}%`} />
+          <StatTile label="Dispute score" value={`${report.disputeScore}%`} />
+          <StatTile label="Uncertainty score" value={`${report.uncertaintyScore}%`} />
+          <StatTile label="Story confidence" value={`${report.storyConfidence}%`} />
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-card p-6">
@@ -120,16 +149,14 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
                       title={`Open ${OSCAR.analysis} for this article`}
                     >
                       <SourceBadge
-                        source={
-                          sourceById(s.sourceId) ?? {
-                            id: s.sourceId,
-                            name: s.sourceName,
-                            domain: s.sourceDomain,
-                            bias: "center",
-                            reliability: 70,
-                            approved: true,
-                          }
-                        }
+                        source={{
+                          id: s.sourceId,
+                          name: s.sourceName,
+                          domain: s.sourceDomain,
+                          bias: "center",
+                          reliability: 70,
+                          approved: true,
+                        }}
                         small
                       />
                     </Link>

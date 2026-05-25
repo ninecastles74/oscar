@@ -1,23 +1,44 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowUpRight, FileSearch, TrendingUp } from "lucide-react";
-import { CLUSTERS, SOURCES } from "@/lib/mock-data";
+import type { Cluster } from "@/lib/mock-data/types";
+import { SOURCES } from "@/lib/mock-data";
 import { ArticleThumbnail } from "@/components/article-thumbnail";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { StatTile } from "@/components/stat-tile";
 import { SourceBadge } from "@/features/sources/source-badge";
 import { OSCAR } from "@/lib/brand";
 
-export function DashboardView() {
-  const trending = [...CLUSTERS].sort((a, b) => b.trendingScore - a.trendingScore).slice(0, 6);
-  const disputed = [...CLUSTERS].filter((c) => c.disputedClaims > 1).slice(0, 4);
-  const avgConfidence = Math.round(CLUSTERS.reduce((a, c) => a + c.confidence, 0) / CLUSTERS.length);
+export function DashboardView({
+  clusters,
+  usingLiveFeed = false,
+  meta,
+}: {
+  clusters: Cluster[];
+  usingLiveFeed?: boolean;
+  meta?: { top100Count?: number; lastIngestAt?: string | null };
+}) {
+  const trending = [...clusters].sort((a, b) => b.trendingScore - a.trendingScore).slice(0, 6);
+  const disputed = [...clusters].filter((c) => c.disputedClaims > 0).slice(0, 4);
+  const avgConfidence =
+    clusters.length > 0
+      ? Math.round(clusters.reduce((a, c) => a + c.confidence, 0) / clusters.length)
+      : 0;
+  const totalDisputed = clusters.reduce((a, c) => a + c.disputedClaims, 0);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="mb-8 flex items-end justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.signals}</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            {OSCAR.signals}
+            {usingLiveFeed ? " · live Top 100" : " · fixtures"}
+          </div>
           <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Newsroom overview</h1>
+          {meta?.lastIngestAt && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last ingest {new Date(meta.lastIngestAt).toLocaleString()}
+            </p>
+          )}
         </div>
         <Link
           to="/analyze"
@@ -28,14 +49,14 @@ export function DashboardView() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Stories analyzed (24h)" value="12,418" hint="+8.2% vs yesterday" />
-        <StatTile label="Active clusters" value={CLUSTERS.length} hint="Top 100 view" />
-        <StatTile label="Avg. confidence" value={`${avgConfidence}%`} hint="Across all claims" />
         <StatTile
-          label="Disputed claims"
-          value={CLUSTERS.reduce((a, c) => a + c.disputedClaims, 0)}
-          hint="Flagged in last 24h"
+          label="Active clusters"
+          value={meta?.top100Count ?? clusters.length}
+          hint="Top 100 slots"
         />
+        <StatTile label="Avg. confidence" value={`${avgConfidence}%`} hint="Across feed clusters" />
+        <StatTile label="Disputed claim flags" value={totalDisputed} hint="Cross-source disputes" />
+        <StatTile label="Sources in registry" value={SOURCES.length} hint="Approved outlets" />
       </div>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
@@ -84,34 +105,38 @@ export function DashboardView() {
           <div>
             <h2 className="mb-3 font-serif text-xl font-semibold">Disputed now</h2>
             <div className="space-y-2">
-              {disputed.map((c) => (
-                <Link
-                  key={c.id}
-                  to="/stories/$clusterId"
-                  params={{ clusterId: c.id }}
-                  className="block rounded-lg border bg-card p-3 transition-colors hover:bg-secondary/40"
-                >
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
-                    <AlertTriangle className="h-3 w-3" /> {c.disputedClaims} disputed
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-sm font-medium">{c.title}</p>
-                </Link>
-              ))}
+              {disputed.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No disputed clusters in the current feed.</p>
+              ) : (
+                disputed.map((c) => (
+                  <Link
+                    key={c.id}
+                    to="/consensus/$clusterId"
+                    params={{ clusterId: c.id }}
+                    className="block rounded-lg border bg-card p-3 transition-colors hover:bg-secondary/40"
+                  >
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning">
+                      <AlertTriangle className="h-3 w-3" /> {c.disputedClaims} disputed
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm font-medium">{c.title}</p>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
           <div>
             <h2 className="mb-3 font-serif text-xl font-semibold">Top sources</h2>
             <div className="flex flex-wrap gap-2 rounded-xl border bg-card p-4">
-              {SOURCES.slice(0, 8).map((s) => <SourceBadge key={s.id} source={s} />)}
+              {SOURCES.slice(0, 8).map((s) => (
+                <SourceBadge key={s.id} source={s} />
+              ))}
             </div>
           </div>
           <div className="rounded-xl border bg-card p-5">
             <TrendingUp className="h-5 w-5 text-accent" />
             <h3 className="mt-3 font-serif text-lg font-semibold">Cross-source agreement</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Median claim agreement across the top 30 clusters this hour.
-            </p>
-            <div className="mt-4 font-serif text-4xl font-semibold tabular-nums">81%</div>
+            <p className="mt-1 text-xs text-muted-foreground">Median cluster confidence in current feed.</p>
+            <div className="mt-4 font-serif text-4xl font-semibold tabular-nums">{avgConfidence}%</div>
           </div>
         </div>
       </div>

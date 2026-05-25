@@ -1,5 +1,6 @@
 export {
   applyMultiModelToReport,
+  arbitrateSingleClaim,
   enrichVerificationWithMultiModel,
   runMultiModelVerification,
 } from "./orchestrator";

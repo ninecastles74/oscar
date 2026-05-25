@@ -7,7 +7,7 @@ import { getVerificationSnapshot } from "../snapshots";
 import { buildScoreExplainability, buildFullExplainabilityBundle } from "./build-explainability";
 
 const explainSchema = z.object({
-  entityType: z.enum(["article", "source", "author"]),
+  entityType: z.enum(["article", "source", "author", "story"]),
   entityId: z.string().min(1),
   requestId: z.string().min(1).optional(),
   articleId: z.string().min(1).optional(),

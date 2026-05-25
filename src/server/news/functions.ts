@@ -5,11 +5,16 @@ import { ingestNews, type IngestNewsResult } from "./ingest";
 import { getNewsIngestionEnv, isProviderConfigured } from "./env";
 import { getRssRegistrySummary } from "./rss/ingest";
 import {
+  findClaimInFeed,
   getClusterArticlesFromStore,
   getTop100Clusters,
   getFeedMeta,
   getStoredCluster,
 } from "./feed-store";
+import { getReliabilityBundleByArticleId } from "../reliability/engine";
+import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
+import { getVerificationSnapshot } from "../reliability/snapshots";
+import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { MAJOR_US_WORLD_SOURCES } from "./major-publishers";
 import { runScheduledNewsPipeline } from "../jobs/news/scheduled-pipeline";
 import { bootstrapFeedIfEmpty } from "./feed-bootstrap";
@@ -161,6 +166,35 @@ export const getFeedCluster = createServerFn({ method: "GET" })
     const cluster = getStoredCluster(data.clusterId);
     if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     return { cluster };
+  });
+
+/** Resolve a claim id from analyzed feed articles (structured JSON). */
+export const loadFeedClaimDetail = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z.object({ claimId: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    await getTop100Clusters();
+    const hit = findClaimInFeed(data.claimId);
+    if (!hit) {
+      return { error: { code: "NOT_FOUND", message: "Claim not found in live feed" } };
+    }
+    const bundle = getReliabilityBundleByArticleId(hit.articleId);
+    const explainability = bundle
+      ? buildFullExplainabilityBundle(
+          hit.report,
+          bundle,
+          getVerificationSnapshot(hit.articleId)?.results,
+        )
+      : undefined;
+    return {
+      claim: hit.claim,
+      clusterId: hit.clusterId,
+      articleId: hit.articleId,
+      report: analysisReportToManualReport(hit.report),
+      platformReport: hit.report,
+      explainability,
+    };
   });
 
 /** Cluster plus member articles (includes image URLs from APIs/RSS). */

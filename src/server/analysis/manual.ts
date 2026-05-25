@@ -8,6 +8,9 @@ import {
   computeAndStoreReliabilityScores,
   getReliabilityBundleByArticleId,
 } from "../reliability/engine";
+import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
+import { buildFinalIntelligenceReport } from "../orchestration/build-final-intelligence";
+import type { ArticleOrchestrationReport } from "../orchestration/types";
 import {
   getRequest,
   getSubmission,
@@ -144,7 +147,54 @@ export async function runManualAnalysis(input: {
     updateSubmission(submission);
     updateRequest(request);
 
-    return { request, submission, report: reportWithConsensus, reliability };
+    let finalIntelligence: ManualAnalysisResponse["finalIntelligence"];
+    if (process.env.FINAL_INTELLIGENCE_ON_MANUAL !== "false") {
+      const articleResult: ArticleOrchestrationReport = {
+        articleId: requestId,
+        report: reportWithConsensus,
+        results,
+        reliability,
+        transparency: buildTransparencyExplainabilityBundle({
+          report: reportWithConsensus,
+          bundle: reliability,
+          results,
+        }),
+        stagesCompleted: [
+          "verification",
+          "multi_model",
+          "reliability",
+          "claim_consensus",
+          "transparency",
+        ],
+        computedAt: new Date().toISOString(),
+      };
+      try {
+        const full = await buildFinalIntelligenceReport({
+          article: pipelineArticle,
+          trigger,
+          reportId: requestId,
+          authorDisplayName: parsed.author,
+          articleResult,
+          skipMultiModel: true,
+        });
+        finalIntelligence = {
+          finalArticleReliability: full.finalArticleReliability,
+          finalSourceReliability: full.finalSourceReliability,
+          finalAuthorReliability: full.finalAuthorReliability,
+          finalStoryConfidence: full.finalStoryConfidence,
+          finalUncertaintyLevel: full.finalUncertaintyLevel,
+          disclaimer: full.disclaimer,
+          intelligenceSummary: full.intelligenceSummary,
+          computedAt: full.computedAt,
+        };
+        request.finalIntelligence = finalIntelligence;
+        updateRequest(request);
+      } catch {
+        /* final intelligence is best-effort */
+      }
+    }
+
+    return { request, submission, report: reportWithConsensus, reliability, finalIntelligence };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Analysis failed";
     submission.status = "failed";
@@ -168,11 +218,13 @@ export function getManualAnalysisResult(requestId: string): ManualAnalysisRespon
     getReliabilityBundleByArticleId(requestId);
   if (!reliability) return null;
 
+  const stored = getRequest(requestId);
   return {
     request,
     submission,
     report: request.report,
     reliability,
+    finalIntelligence: stored?.finalIntelligence,
   };
 }
 

@@ -24,6 +24,10 @@ export function computeContradictionScore(issues: ContradictionIssue[], report: 
   risk += report.conflictingReporting.length * 14;
   risk += report.timelineInconsistencies.length * 10;
   risk += report.unsupportedCausalClaims.length * 12;
+  risk += (report.unsupportedStatistics?.length ?? 0) * 11;
+  if ((report.framingIntensityScore ?? 0) >= 50) {
+    risk += Math.min(18, Math.floor((report.framingIntensityScore ?? 0) / 5));
+  }
   return clampScore(Math.min(100, risk));
 }
 
@@ -48,6 +52,12 @@ export function buildAnalysisSummary(report: ContradictionAnalysisReport): strin
   }
   if (report.unsupportedCausalClaims.length > 0) {
     parts.push(`${report.unsupportedCausalClaims.length} unsupported causal claim(s).`);
+  }
+  if ((report.unsupportedStatistics?.length ?? 0) > 0) {
+    parts.push(`${report.unsupportedStatistics!.length} unsupported statistic(s).`);
+  }
+  if ((report.emotionalExaggeration?.length ?? 0) > 0) {
+    parts.push(`Emotional framing intensity ${report.framingIntensityScore ?? 0}/100.`);
   }
   return parts.join(" ");
 }

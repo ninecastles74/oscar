@@ -49,7 +49,7 @@ export function ClickableScore({
         <span className="text-lg text-muted-foreground">/100</span>
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground group-hover:text-foreground/80">
-        Click to see why this score exists, how it was calculated, and contributing evidence
+        Why this score? — how it was generated, what evidence contributed, what reduced confidence
       </p>
     </button>
   );

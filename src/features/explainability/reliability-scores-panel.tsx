@@ -23,7 +23,8 @@ export function ReliabilityScoresPanel({
       <section className="rounded-xl border bg-card p-6">
         <h2 className="font-serif text-2xl font-semibold">{OSCAR.reliability}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Evidence-weighted reliability — click any score for full transparency
+          Why this score? Click any score to see how it was generated, contributing evidence, and
+          what reduced confidence
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ClickableScore

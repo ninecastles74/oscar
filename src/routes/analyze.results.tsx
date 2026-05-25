@@ -31,6 +31,8 @@ export const Route = createFileRoute("/analyze/results")({
       report: analysisReportToManualReport(result.report),
       platformReport: result.report,
       explainability: "explainability" in result ? result.explainability : undefined,
+      finalIntelligence:
+        "finalIntelligence" in result ? result.finalIntelligence : undefined,
       requestId: deps.requestId,
       submission: result.submission,
     };
@@ -74,6 +76,7 @@ function AnalyzeResultsPage() {
       report={data.report}
       platformReport={"platformReport" in data ? data.platformReport : undefined}
       explainability={"explainability" in data ? data.explainability : undefined}
+      finalIntelligence={"finalIntelligence" in data ? data.finalIntelligence : undefined}
     />
   );
 }

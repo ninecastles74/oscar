@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import type { Cluster } from "@/lib/mock-data";
 import { clusterById, sourceById, storiesForCluster } from "@/lib/mock-data";
-import type { StoryConsensusReport } from "@/types/news-platform";
+import type { ScoreExplainability, StoryConsensusReport } from "@/types/news-platform";
 import { StoryConsensusView } from "@/features/story-clusters/story-consensus-view";
 import {
   getStoryConsensusReport,
@@ -16,7 +16,12 @@ export const Route = createFileRoute("/consensus/$clusterId")({
   loader: async ({ params }) => {
     const live = await loadFeedClusterConsensus({ data: { clusterId: params.clusterId } });
     if (live && "report" in live && live.report) {
-      return { report: live.report as StoryConsensusReport, cluster: storyClusterToUiCluster(live.cluster, 0) };
+      return {
+        report: live.report as StoryConsensusReport,
+        cluster: storyClusterToUiCluster(live.cluster, 0),
+        storyExplainability: (live as { storyExplainability?: ScoreExplainability })
+          .storyExplainability,
+      };
     }
     if (live && "error" in live && live.error && live.cluster) {
       return {
@@ -29,8 +34,12 @@ export const Route = createFileRoute("/consensus/$clusterId")({
     if (!cluster) throw notFound();
 
     const cached = await getStoryConsensusReport({ data: { clusterId: params.clusterId } });
-    if (cached && "consensusScore" in cached) {
-      return { report: cached as StoryConsensusReport, cluster };
+    if (cached && "report" in cached && cached.report) {
+      return {
+        report: cached.report as StoryConsensusReport,
+        cluster,
+        storyExplainability: cached.storyExplainability as ScoreExplainability | undefined,
+      };
     }
 
     const stories = storiesForCluster(params.clusterId);
@@ -62,8 +71,12 @@ export const Route = createFileRoute("/consensus/$clusterId")({
     if (result && "error" in result && result.error) {
       return { error: result.error, cluster };
     }
-    if (result && "consensusScore" in result) {
-      return { report: result, cluster };
+    if (result && "report" in result && result.report) {
+      return {
+        report: result.report as StoryConsensusReport,
+        cluster,
+        storyExplainability: result.storyExplainability as ScoreExplainability | undefined,
+      };
     }
     return { error: { message: "Consensus analysis failed" }, cluster };
   },
@@ -72,7 +85,11 @@ export const Route = createFileRoute("/consensus/$clusterId")({
 });
 
 type LoaderData =
-  | { report: StoryConsensusReport; cluster: Cluster }
+  | {
+      report: StoryConsensusReport;
+      cluster: Cluster;
+      storyExplainability?: ScoreExplainability;
+    }
   | { error: { message: string; code?: string }; cluster: Cluster };
 
 function ConsensusRoute() {
@@ -94,5 +111,10 @@ function ConsensusRoute() {
     return null;
   }
 
-  return <StoryConsensusView report={data.report} />;
+  return (
+    <StoryConsensusView
+      report={data.report}
+      storyExplainability={"storyExplainability" in data ? data.storyExplainability : undefined}
+    />
+  );
 }

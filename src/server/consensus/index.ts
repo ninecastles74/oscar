@@ -1,5 +1,9 @@
 export { buildStoryConsensus } from "./build-consensus";
 export {
+  buildStoryConsensusIntelligence,
+  computeEvidenceDensityScore,
+} from "./story-intelligence";
+export {
   runStoryConsensusForCluster,
   runStoryConsensusFromArticles,
 } from "./analyze-cluster";

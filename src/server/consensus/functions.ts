@@ -20,6 +20,8 @@ import { stableArticleId } from "../news/utils/text";
 import type { PipelineArticleContext } from "../analysis/types";
 import { computeAndStoreReliabilityScores, getReliabilityBundleByArticleId } from "../reliability/engine";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
+import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
+import { buildStoryScoreExplainability } from "../transparency-explainability/build-story-explainability";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
 
@@ -86,7 +88,7 @@ export const runStoryConsensus = createServerFn({ method: "POST" })
       };
       const report = runStoryConsensusForCluster(cluster, articles);
       saveStoryConsensus(report);
-      return report;
+      return { report, storyExplainability: buildStoryScoreExplainability(report) };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Consensus analysis failed";
       return { error: { code: "CONSENSUS_FAILED", message } };
@@ -101,7 +103,7 @@ export const getStoryConsensusReport = createServerFn({ method: "GET" })
     if (!report) {
       return { error: { code: "NOT_FOUND", message: "No consensus report for this cluster" } };
     }
-    return report;
+    return { report, storyExplainability: buildStoryScoreExplainability(report) };
   });
 
 function articleToPipeline(article: NewsArticle): PipelineArticleContext {
@@ -163,7 +165,8 @@ export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
     }
     try {
       const report = await ensureFeedConsensusReport(cluster, articles);
-      return { report, cluster };
+      const storyExplainability = buildStoryScoreExplainability(report);
+      return { report, cluster, storyExplainability };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Consensus analysis failed";
       return { error: { code: "CONSENSUS_FAILED", message }, cluster };
@@ -213,11 +216,13 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       return { error: { code: "ANALYSIS_FAILED", message: "Could not build reliability scores" } };
     }
 
-    const explainability = buildFullExplainabilityBundle(
-      bundle.report,
-      reliability,
-      bundle.results,
-    );
+    const storyReport = getStoryConsensus(data.clusterId);
+    const explainability = buildTransparencyExplainabilityBundle({
+      report: bundle.report,
+      bundle: reliability,
+      results: bundle.results,
+      storyReport: storyReport ?? null,
+    });
 
     return {
       clusterId: data.clusterId,

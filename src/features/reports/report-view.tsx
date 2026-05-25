@@ -1,7 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import type { ManualReport } from "@/lib/mock-data";
-import type { AnalysisExplainabilityBundle, AnalysisReport } from "@/types/news-platform";
+import type {
+  AnalysisExplainabilityBundle,
+  AnalysisReport,
+  FinalIntelligenceSummary,
+} from "@/types/news-platform";
+import { FinalIntelligencePanel } from "@/features/explainability/final-intelligence-panel";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { StatTile } from "@/components/stat-tile";
 import { ClaimPanel } from "@/features/claims/claim-panel";
@@ -19,10 +24,12 @@ export function ReportView({
   report,
   platformReport,
   explainability,
+  finalIntelligence,
 }: {
   report: ManualReport;
   platformReport?: AnalysisReport;
   explainability?: AnalysisExplainabilityBundle;
+  finalIntelligence?: FinalIntelligenceSummary;
 }) {
   const [claimExplainOpen, setClaimExplainOpen] = useState(false);
   const [claimExplain, setClaimExplain] = useState<ScoreExplainability | null>(null);
@@ -74,6 +81,12 @@ export function ReportView({
       {explainability && (
         <div className="mt-8">
           <ReliabilityScoresPanel explainability={explainability} />
+        </div>
+      )}
+
+      {finalIntelligence && (
+        <div className="mt-8">
+          <FinalIntelligencePanel scores={finalIntelligence} />
         </div>
       )}
 

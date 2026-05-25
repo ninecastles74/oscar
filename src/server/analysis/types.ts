@@ -4,6 +4,7 @@ import type {
   ReliabilityScoreBundle,
   UserAnalysisRequest,
 } from "@/types/news-platform";
+import type { FinalIntelligenceSummary } from "@/types/news-platform";
 
 export type ArticleContentRights = "user_provided" | "metadata_only" | "licensed_excerpt";
 
@@ -30,4 +31,5 @@ export interface ManualAnalysisResponse {
   submission: ManualSubmission;
   report: AnalysisReport;
   reliability: ReliabilityScoreBundle;
+  finalIntelligence?: FinalIntelligenceSummary;
 }

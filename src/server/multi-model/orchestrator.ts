@@ -124,6 +124,15 @@ async function verifyOneClaim(
   };
 }
 
+/** Single-claim multi-model arbitration (exported for services layer). */
+export async function arbitrateSingleClaim(
+  claim: { id: string; text: string; verdict: string; confidence: number },
+  evidence: EvidenceItem[],
+  contradiction?: import("@/types/news-platform").ContradictionAnalysisReport,
+) {
+  return verifyOneClaim(claim, evidence, contradiction);
+}
+
 /**
  * Multi-model claim verification workflow:
  * 1. OpenAI primary → 2. Claude review (disputed/uncertain) → 3. Gemini corroboration → 4. Consensus

@@ -301,6 +301,27 @@ export function getArticleBundle(articleId: string): AnalyzedArticleBundle | und
   return state.articleBundles.get(articleId);
 }
 
+/** Find a claim from any analyzed feed article bundle. */
+export function findClaimInFeed(claimId: string): {
+  claim: import("@/types/news-platform").Claim;
+  clusterId: string;
+  articleId: string;
+  report: import("@/types/news-platform").AnalysisReport;
+} | null {
+  for (const [articleId, bundle] of state.articleBundles) {
+    const claim = bundle.report.claims.find((c) => c.id === claimId);
+    if (!claim) continue;
+    const article = state.articles.get(articleId);
+    return {
+      claim,
+      clusterId: article?.clusterId ?? bundle.report.urlOrClusterId,
+      articleId,
+      report: bundle.report,
+    };
+  }
+  return null;
+}
+
 export function getClusterArticlesFromStore(clusterId: string): NewsArticle[] {
   return [...state.articles.values()].filter((a) => a.clusterId === clusterId);
 }
