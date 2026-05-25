@@ -6,10 +6,12 @@ import type {
 import type { VerificationPipelineResults } from "../analysis/verification/types";
 import {
   availableProviders,
+  isGeminiLiveEnabled,
   isMultiModelEnabled,
   REVIEW_CONFIDENCE_THRESHOLD,
   REVIEW_VERDICTS,
 } from "./config";
+import { isGeminiGoogleSearchEnabled, isGoogleAiConfigured } from "../ai/google-api-key";
 import { buildMultiModelConsensus, toClaimVerification } from "./consensus";
 import { providersInvolved } from "./disagreement";
 import {
@@ -99,7 +101,7 @@ async function verifyOneClaim(
   }
 
   let corroboration: ModelClaimVerdict | null = null;
-  if (process.env.GOOGLE_AI_API_KEY?.trim()) {
+  if (isGeminiLiveEnabled()) {
     stages.push("gemini_corroboration");
     corroboration = await verifyClaimWithGemini({
       claimId: claim.id,
@@ -111,7 +113,13 @@ async function verifyOneClaim(
   }
   if (!corroboration) {
     stages.push("heuristic_corroboration");
-    corroboration = heuristicCorroborationVerdict(evidence, review.skipped ? primary : review);
+    const heuristic = heuristicCorroborationVerdict(evidence, review.skipped ? primary : review);
+    corroboration = {
+      ...heuristic,
+      skipReason: isGeminiLiveEnabled()
+        ? "Gemini API unavailable or returned no verdict — heuristic corroboration used."
+        : "GOOGLE_AI_API_KEY / GEMINI_API_KEY not configured — heuristic corroboration only.",
+    };
   }
 
   const modelVerdicts = [primary, review, corroboration];
@@ -195,13 +203,43 @@ export async function runMultiModelVerification(
     for (const p of availableProviders()) modelsUsed.push(p);
   }
 
+  let geminiLiveCalls = 0;
+  let claimsWithGoogleSearch = 0;
+  let totalSearchQueries = 0;
+  let totalGeminiTokens = 0;
+  for (const v of verifications) {
+    const gem = v.consensus.modelVerdicts.find((m) => m.provider === "google");
+    if (gem?.geminiMeta?.liveApiCalled) geminiLiveCalls += 1;
+    if (gem?.geminiMeta?.searchPerformed) {
+      claimsWithGoogleSearch += 1;
+      totalSearchQueries += gem.geminiMeta.searchQueryCount;
+    }
+    if (gem?.geminiMeta?.totalTokens) totalGeminiTokens += gem.geminiMeta.totalTokens;
+  }
+
+  const geminiUsage = {
+    configured: isGoogleAiConfigured(),
+    googleSearchEnabled: isGeminiGoogleSearchEnabled(),
+    liveApiCalls: geminiLiveCalls,
+    claimsWithGoogleSearch,
+    totalSearchQueries,
+    totalTokens: totalGeminiTokens > 0 ? totalGeminiTokens : undefined,
+  };
+
+  const geminiNote = isGoogleAiConfigured()
+    ? geminiLiveCalls > 0
+      ? ` Gemini: ${geminiLiveCalls} live call(s), ${totalSearchQueries} Google Search quer${totalSearchQueries === 1 ? "y" : "ies"}.`
+      : " Gemini key set but no live corroboration responses (check model name / API errors)."
+    : " Gemini: not configured (set GOOGLE_AI_API_KEY or GEMINI_API_KEY).";
+
   return {
     articleId: results.article.submissionId,
     claims: verifications,
     overallConfidence,
     disagreementCount,
     modelsUsed,
-    summary: `Multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.`,
+    geminiUsage,
+    summary: `Multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.${geminiNote}`,
     computedAt: new Date().toISOString(),
   };
 }

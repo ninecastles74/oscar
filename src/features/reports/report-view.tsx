@@ -200,6 +200,43 @@ export function ReportView({
         </div>
       </div>
 
+      {platformReport?.multiModelVerification && (
+        <div className="mt-8 rounded-xl border bg-card p-6">
+          <h2 className="font-serif text-xl font-semibold">Multi-model AI (OpenAI · Claude · Gemini)</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {platformReport.multiModelVerification.summary}
+          </p>
+          {platformReport.multiModelVerification.geminiUsage && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+              <div className="rounded-lg border bg-secondary/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Gemini configured</div>
+                <div className="font-semibold">
+                  {platformReport.multiModelVerification.geminiUsage.configured ? "Yes" : "No"}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Live Gemini calls</div>
+                <div className="font-mono font-semibold">
+                  {platformReport.multiModelVerification.geminiUsage.liveApiCalls}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Google Search queries</div>
+                <div className="font-mono font-semibold">
+                  {platformReport.multiModelVerification.geminiUsage.totalSearchQueries}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Claims with search</div>
+                <div className="font-mono font-semibold">
+                  {platformReport.multiModelVerification.geminiUsage.claimsWithGoogleSearch}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {platformReport?.issueSummary && (
         <div className="mt-8 rounded-xl border bg-secondary/20 p-6">
           <h2 className="font-serif text-xl font-semibold">Issue signals</h2>

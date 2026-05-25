@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ApiProviderId } from "@/types/news-platform";
 import { ingestNews, type IngestNewsResult } from "./ingest";
 import { getNewsIngestionEnv, isProviderConfigured } from "./env";
+import { getMultiModelProviderStatus } from "../multi-model/provider-status";
 import { getRssRegistrySummary } from "./rss/ingest";
 import {
   findClaimInFeed,
@@ -130,6 +131,10 @@ export const getNewsFeedDiagnostics = createServerFn({ method: "GET" }).handler(
         return `${p}: add ${p === "newsapi" ? "NEWS_API_KEY" : p === "gnews" ? "GNEWS_API_KEY" : p === "guardian" ? "GUARDIAN_API_KEY" : p} secret in Cloudflare`;
       }),
     rss: getRssRegistrySummary(env),
+    multiModel: {
+      user: getMultiModelProviderStatus("user"),
+      scheduled: getMultiModelProviderStatus("scheduled"),
+    },
     recommendations: [
       !kv.configured
         ? "Create KV namespace FEED_KV and add binding in wrangler.jsonc (see docs/CLOUDFLARE_NEWS_SETUP.md)."

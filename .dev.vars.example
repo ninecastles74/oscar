@@ -17,6 +17,13 @@ SCHEDULED_NEWS_ENABLED=true
 # GNEWS_API_KEY=
 # GUARDIAN_API_KEY=
 
+# --- Gemini / Google AI (use any one secret name on Workers) ---
+# GOOGLE_AI_API_KEY=
+# GEMINI_API_KEY=
+# GEMINI_VERIFICATION_MODEL=gemini-2.5-flash
+# GEMINI_ENABLE_GOOGLE_SEARCH=true
+# GEMINI_FETCH_TIMEOUT_MS=25000
+
 # --- Ask Oscar manual analysis ---
 # Returns immediately; analysis runs in the background (Workers waitUntil).
 # FINAL_INTELLIGENCE_ON_MANUAL=true  # optional; adds ~30s+ per run

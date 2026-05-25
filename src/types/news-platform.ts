@@ -426,6 +426,18 @@ export type ArbitrationMethod =
   | "primary_override"
   | "evidence_fallback";
 
+/** Gemini live API usage (Google Search grounding + token counts when available). */
+export interface GeminiProviderMeta {
+  liveApiCalled: boolean;
+  searchPerformed: boolean;
+  searchQueryCount: number;
+  webSearchQueries: string[];
+  sourcesUsed: Array<{ title?: string; uri?: string }>;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export interface ModelClaimVerdict {
   provider: ModelProviderId;
   model: string;
@@ -435,6 +447,8 @@ export interface ModelClaimVerdict {
   reasoning: string;
   skipped?: boolean;
   skipReason?: string;
+  /** Populated when provider is google and the Gemini API responded. */
+  geminiMeta?: GeminiProviderMeta;
 }
 
 export interface ModelDisagreement {
@@ -464,6 +478,15 @@ export interface MultiModelClaimVerification {
   computedAt: string;
 }
 
+export interface MultiModelGeminiUsageSummary {
+  liveApiCalls: number;
+  claimsWithGoogleSearch: number;
+  totalSearchQueries: number;
+  totalTokens?: number;
+  configured: boolean;
+  googleSearchEnabled: boolean;
+}
+
 export interface MultiModelVerificationReport {
   articleId: string;
   claims: MultiModelClaimVerification[];
@@ -471,6 +494,7 @@ export interface MultiModelVerificationReport {
   disagreementCount: number;
   modelsUsed: ModelProviderId[];
   summary: string;
+  geminiUsage?: MultiModelGeminiUsageSummary;
   computedAt: string;
 }
 

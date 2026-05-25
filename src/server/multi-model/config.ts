@@ -1,4 +1,5 @@
 import type { ModelProviderId, Verdict } from "@/types/news-platform";
+import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
 
 export const MODEL_WEIGHTS = {
   primary: 0.45,
@@ -21,7 +22,7 @@ export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): 
   return (
     !!process.env.OPENAI_API_KEY?.trim() ||
     !!process.env.ANTHROPIC_API_KEY?.trim() ||
-    !!process.env.GOOGLE_AI_API_KEY?.trim() ||
+    isGoogleAiConfigured() ||
     process.env.MULTI_MODEL_VERIFICATION_ENABLED === "true"
   );
 }
@@ -30,6 +31,11 @@ export function availableProviders(): ModelProviderId[] {
   const out: ModelProviderId[] = [];
   if (process.env.OPENAI_API_KEY?.trim()) out.push("openai");
   if (process.env.ANTHROPIC_API_KEY?.trim()) out.push("anthropic");
-  if (process.env.GOOGLE_AI_API_KEY?.trim()) out.push("google");
+  if (isGoogleAiConfigured()) out.push("google");
   return out;
+}
+
+/** True when a live Gemini corroboration call should run (not heuristic-only). */
+export function isGeminiLiveEnabled(): boolean {
+  return isGoogleAiConfigured();
 }
