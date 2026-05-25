@@ -12,8 +12,11 @@ import { StatTile } from "@/components/stat-tile";
 import { ClaimPanel } from "@/features/claims/claim-panel";
 import { VerdictBadge } from "@/features/claims/verdict-badge";
 import { SourceBadge } from "@/features/sources/source-badge";
+import { ArticleElevenScoresPanel } from "@/features/explainability/article-eleven-scores-panel";
+import type { ArticleStoryScores } from "@/features/explainability/article-eleven-scores-panel";
 import { ArticleWeightedScorePanel } from "@/features/explainability/article-weighted-score-panel";
 import { ReliabilityScoresPanel } from "@/features/explainability/reliability-scores-panel";
+import type { StoryConsensusReport, TransparencyExplainabilityBundle } from "@/types/news-platform";
 import { TopicBadges } from "@/features/topics/topic-badges";
 import { ClickableScore } from "@/features/explainability/clickable-score";
 import { ScoreExplainabilitySheet } from "@/features/explainability/score-explainability-sheet";
@@ -27,11 +30,20 @@ export function ReportView({
   platformReport,
   explainability,
   finalIntelligence,
+  hideTopBackLink = false,
+  articlePageMode = false,
+  storyScores = null,
+  storyReport = null,
 }: {
   report: ManualReport;
   platformReport?: AnalysisReport;
-  explainability?: AnalysisExplainabilityBundle;
+  explainability?: AnalysisExplainabilityBundle | TransparencyExplainabilityBundle;
   finalIntelligence?: FinalIntelligenceSummary;
+  hideTopBackLink?: boolean;
+  /** Feed article pages: show all 11 score tiles + full breakdown. */
+  articlePageMode?: boolean;
+  storyScores?: ArticleStoryScores | null;
+  storyReport?: StoryConsensusReport | null;
 }) {
   const [claimExplainOpen, setClaimExplainOpen] = useState(false);
   const [claimExplain, setClaimExplain] = useState<ScoreExplainability | null>(null);
@@ -90,7 +102,25 @@ export function ReportView({
         </button>
       </div>
 
-      {explainability && (
+      {explainability && articlePageMode && (
+        <div className="mt-8 space-y-8">
+          <ArticleElevenScoresPanel
+            articleExplainability={explainability.article}
+            storyExplainability={
+              "story" in explainability && explainability.story ? explainability.story : null
+            }
+            storyScores={storyScores}
+            storyReport={storyReport}
+          />
+          <ArticleWeightedScorePanel
+            explainability={explainability.article}
+            verificationConfidence={report.overallConfidence}
+          />
+          <ReliabilityScoresPanel explainability={explainability} hideArticle />
+        </div>
+      )}
+
+      {explainability && !articlePageMode && (
         <div className="mt-8 space-y-8">
           <ArticleWeightedScorePanel
             explainability={explainability.article}
@@ -106,25 +136,39 @@ export function ReportView({
         </div>
       )}
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-4">
-        {explainability ? (
-          <ClickableScore
-            score={report.overallConfidence}
-            label="Verification confidence"
-            sublabel="Mean claim confidence"
-            onClick={openClaimConfidence}
-            className="sm:col-span-1"
+      {!articlePageMode && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-4">
+          {explainability ? (
+            <ClickableScore
+              score={report.overallConfidence}
+              label="Verification confidence"
+              sublabel="Mean claim confidence"
+              onClick={openClaimConfidence}
+              className="sm:col-span-1"
+            />
+          ) : (
+            <StatTile label="Overall confidence" value={`${report.overallConfidence}%`} />
+          )}
+          <StatTile label="Claims" value={report.claims.length} />
+          <StatTile label="Supported" value={counts.supported ?? 0} />
+          <StatTile
+            label="Unclear / Insufficient"
+            value={(counts.unclear ?? 0) + (counts.insufficient_evidence ?? 0)}
           />
-        ) : (
-          <StatTile label="Overall confidence" value={`${report.overallConfidence}%`} />
-        )}
-        <StatTile label="Claims" value={report.claims.length} />
-        <StatTile label="Supported" value={counts.supported ?? 0} />
-        <StatTile
-          label="Unclear / Insufficient"
-          value={(counts.unclear ?? 0) + (counts.insufficient_evidence ?? 0)}
-        />
-      </div>
+        </div>
+      )}
+
+      {articlePageMode && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-4">
+          <StatTile label="Verification confidence" value={`${report.overallConfidence}%`} />
+          <StatTile label="Claims" value={report.claims.length} />
+          <StatTile label="Supported" value={counts.supported ?? 0} />
+          <StatTile
+            label="Unclear / Insufficient"
+            value={(counts.unclear ?? 0) + (counts.insufficient_evidence ?? 0)}
+          />
+        </div>
+      )}
 
       <div className="mt-8 rounded-xl border bg-card p-6">
         <h2 className="font-serif text-xl font-semibold">Executive summary</h2>

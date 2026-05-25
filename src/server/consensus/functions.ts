@@ -216,18 +216,33 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       return { error: { code: "ANALYSIS_FAILED", message: "Could not build reliability scores" } };
     }
 
-    const storyReport = getStoryConsensus(data.clusterId);
+    let storyReport = getStoryConsensus(data.clusterId);
+    if (!storyReport) {
+      storyReport = await ensureFeedConsensusReport(cluster, articles);
+    }
+
     const explainability = buildTransparencyExplainabilityBundle({
       report: bundle.report,
       bundle: reliability,
       results: bundle.results,
-      storyReport: storyReport ?? null,
+      storyReport,
     });
+
+    const storyScores = storyReport
+      ? {
+          consensusScore: storyReport.consensusScore,
+          disputeScore: storyReport.disputeScore,
+          uncertaintyScore: storyReport.uncertaintyScore,
+          storyConfidence: storyReport.storyConfidence,
+        }
+      : null;
 
     return {
       clusterId: data.clusterId,
       report: analysisReportToManualReport(bundle.report),
       platformReport: bundle.report,
       explainability,
+      storyReport: storyReport ?? null,
+      storyScores,
     };
   });
