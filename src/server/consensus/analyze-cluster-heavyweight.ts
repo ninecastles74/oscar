@@ -12,6 +12,7 @@ import {
 } from "../news/feed-store";
 import type { PipelineArticleContext } from "../analysis/types";
 import { buildStoryConsensus } from "./build-consensus";
+import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import type { AnalyzedArticleBundle, StoryConsensusInput } from "./types";
 
 const MAX_ARTICLES_PER_CONSENSUS = 12;
@@ -98,8 +99,8 @@ export async function runHeavyweightClusterAnalysis(
   const clusterArticles =
     members.length > 0 ? members : articles.slice(0, MAX_ARTICLES_PER_CONSENSUS);
 
-  if (clusterArticles.length < 2) {
-    throw new Error("Story consensus requires at least 2 articles covering the same event.");
+  if (clusterArticles.length < MIN_ARTICLES_FOR_CLUSTER_ANALYSIS) {
+    throw new Error("Story analysis requires at least one article in this cluster.");
   }
 
   const analyzed: AnalyzedArticleBundle[] = [];
@@ -113,8 +114,8 @@ export async function runHeavyweightClusterAnalysis(
     analyzed.push(bundle);
   }
 
-  if (analyzed.length < 2) {
-    throw new Error("Not enough analyzed articles for cluster consensus.");
+  if (analyzed.length < MIN_ARTICLES_FOR_CLUSTER_ANALYSIS) {
+    throw new Error("Not enough analyzed articles for cluster analysis.");
   }
 
   const input: StoryConsensusInput = {

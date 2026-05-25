@@ -63,10 +63,28 @@ export function calculateConsensusScores(
   return { consensusScore, disputeScore, uncertaintyScore, storyConfidence };
 }
 
+/** Claim highlights when only one article is in the cluster (no cross-outlet overlap). */
+export function buildSingleSourceClaims(
+  articles: AnalyzedArticleBundle[],
+): StoryConsensusReport["overlappingClaims"] {
+  const article = articles[0];
+  if (!article) return [];
+  return article.report.claims.map((claim, index) => ({
+    groupId: `single_${article.articleId}_${index}`,
+    canonicalText: claim.text,
+    articleIds: [article.articleId],
+    sourceIds: [article.sourceId],
+    agreementScore: claim.confidence,
+    averageConfidence: claim.confidence,
+    verdicts: { [claim.verdict]: 1 },
+  }));
+}
+
 export function buildOverlappingClaims(
   alignedGroups: AlignedClaimGroup[],
+  options?: { includeSingleSource?: boolean; articles?: AnalyzedArticleBundle[] },
 ): StoryConsensusReport["overlappingClaims"] {
-  return alignedGroups
+  const multiSource = alignedGroups
     .filter((g) => new Set(g.occurrences.map((o) => o.articleId)).size >= 2)
     .map((g) => {
       const verdicts: Partial<Record<Verdict, number>> = {};
@@ -85,6 +103,11 @@ export function buildOverlappingClaims(
         verdicts,
       };
     });
+
+  if (multiSource.length > 0 || !options?.includeSingleSource) {
+    return multiSource;
+  }
+  return buildSingleSourceClaims(options.articles ?? []);
 }
 
 export function buildDisputedClaims(

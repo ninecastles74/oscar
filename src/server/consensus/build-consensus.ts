@@ -13,7 +13,7 @@ import type { StoryConsensusInput } from "./types";
 import { buildConsensusFindingsSummary } from "@/lib/consensus-findings-summary";
 
 /**
- * Story consensus engine — compare multiple articles on the same event.
+ * Story consensus engine — compare articles on the same event (one or more sources).
  */
 export function buildStoryConsensus(input: StoryConsensusInput): StoryConsensusReport {
   const { clusterId, title, articles } = input;
@@ -27,14 +27,23 @@ export function buildStoryConsensus(input: StoryConsensusInput): StoryConsensusR
   const sourceAgreementMap = buildSourceAgreementMap(articles, alignedGroups, omittedGroupIds);
 
   const sourceCount = new Set(articles.map((a) => a.sourceId)).size;
+  const singleSource = articles.length === 1 || sourceCount === 1;
+  const overlappingClaims = buildOverlappingClaims(alignedGroups, {
+    includeSingleSource: singleSource,
+    articles,
+  });
+
   const summary =
     input.summary ??
-    `Compared ${articles.length} articles from ${sourceCount} sources. ` +
-      `${buildOverlappingClaims(alignedGroups).length} overlapping claim(s), ` +
-      `${buildDisputedClaims(alignedGroups).length} disputed, ` +
-      `${omittedContext.length} context gap(s) identified.`;
-
-  const overlappingClaims = buildOverlappingClaims(alignedGroups);
+    (singleSource
+      ? `Oscar analyzed 1 article from ${articles[0]?.sourceName ?? "one outlet"}. ` +
+        `${overlappingClaims.length} claim(s) extracted, ` +
+        `${buildDisputedClaims(alignedGroups).length} flagged as disputed, ` +
+        `${omittedContext.length} context gap(s) noted. Cross-source comparison is not available for this story.`
+      : `Compared ${articles.length} articles from ${sourceCount} sources. ` +
+        `${overlappingClaims.length} overlapping claim(s), ` +
+        `${buildDisputedClaims(alignedGroups).length} disputed, ` +
+        `${omittedContext.length} context gap(s) identified.`);
   const disputedClaims = buildDisputedClaims(alignedGroups);
   const emotionalFramingDifferences = analyzeEmotionalFraming(articles);
   const narrativeDifferences = analyzeNarrativeDifferences(articles, alignedGroups);

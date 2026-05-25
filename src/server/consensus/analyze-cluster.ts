@@ -4,6 +4,7 @@ import { runVerificationPipeline } from "../analysis/verification";
 import { extractDomain } from "../news/utils/url";
 import { stableArticleId } from "../news/utils/text";
 import { buildStoryConsensus } from "./build-consensus";
+import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import type { AnalyzedArticleBundle, StoryConsensusInput } from "./types";
 
 const MAX_ARTICLES_PER_CONSENSUS = 12;
@@ -63,8 +64,8 @@ export function runStoryConsensusForCluster(
       ? members
       : articles.slice(0, MAX_ARTICLES_PER_CONSENSUS);
 
-  if (clusterArticles.length < 2) {
-    throw new Error("Story consensus requires at least 2 articles covering the same event.");
+  if (clusterArticles.length < MIN_ARTICLES_FOR_CLUSTER_ANALYSIS) {
+    throw new Error("Story analysis requires at least one article in this cluster.");
   }
 
   const analyzed = clusterArticles.map(buildArticleBundle);
@@ -82,14 +83,18 @@ export function runStoryConsensusFromArticles(
   title: string,
   articles: NewsArticle[],
 ): ReturnType<typeof buildStoryConsensus> {
-  if (articles.length < 2) {
-    throw new Error("Story consensus requires at least 2 articles.");
+  if (articles.length < MIN_ARTICLES_FOR_CLUSTER_ANALYSIS) {
+    throw new Error("Story analysis requires at least one article.");
   }
   const analyzed = articles.slice(0, MAX_ARTICLES_PER_CONSENSUS).map(buildArticleBundle);
+  const sourceCount = new Set(analyzed.map((a) => a.sourceId)).size;
   return buildStoryConsensus({
     clusterId,
     title,
-    summary: `Multi-source comparison of ${articles.length} articles.`,
+    summary:
+      sourceCount > 1
+        ? `Multi-source comparison of ${articles.length} articles.`
+        : `Single-source Oscar analysis of ${articles.length} article.`,
     articles: analyzed,
   });
 }

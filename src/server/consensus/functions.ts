@@ -2,19 +2,22 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
-import { buildArticleBundle, runStoryConsensusForCluster } from "./analyze-cluster";
+import { runStoryConsensusForCluster } from "./analyze-cluster";
+import {
+  analyzeArticleHeavyweight,
+  runHeavyweightClusterAnalysis,
+} from "./analyze-cluster-heavyweight";
+import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import { getClusterArticles, getStoryConsensus, saveStoryConsensus } from "./store";
 import {
   getArticleBundle,
   getClusterArticlesFromStore,
   getStoredCluster,
-  markArticleAnalyzed,
   updateClusterFromConsensus,
 } from "../news/feed-store";
 import { stableArticleId } from "../news/utils/text";
 import type { PipelineArticleContext } from "../analysis/types";
 import { computeAndStoreReliabilityScores, getReliabilityBundleByArticleId } from "../reliability/engine";
-import { applyClaimConsensusToReport } from "../consensus-engine";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
@@ -123,13 +126,16 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
   };
 }
 
-function ensureFeedConsensusReport(
+async function ensureFeedConsensusReport(
   cluster: StoryCluster,
   articles: NewsArticle[],
-): StoryConsensusReport {
+): Promise<StoryConsensusReport> {
   const cached = getStoryConsensus(cluster.id);
   if (cached) return cached;
-  const report = runStoryConsensusForCluster(cluster, articles);
+  const report =
+    articles.length === 1
+      ? await runHeavyweightClusterAnalysis(cluster, articles)
+      : runStoryConsensusForCluster(cluster, articles);
   saveStoryConsensus(report);
   updateClusterFromConsensus(cluster.id, report);
   return report;
@@ -144,17 +150,17 @@ export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
       return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     }
     const articles = getClusterArticlesFromStore(data.clusterId);
-    if (articles.length < 2) {
+    if (articles.length < MIN_ARTICLES_FOR_CLUSTER_ANALYSIS) {
       return {
         error: {
           code: "INSUFFICIENT_COVERAGE",
-          message: "Need at least 2 articles in this cluster for Oscar analysis.",
+          message: "No articles in this cluster to analyze.",
         },
         cluster,
       };
     }
     try {
-      const report = ensureFeedConsensusReport(cluster, articles);
+      const report = await ensureFeedConsensusReport(cluster, articles);
       return { report, cluster };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Consensus analysis failed";
@@ -188,17 +194,7 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     const key = article.id || stableArticleId(article.url);
     let bundle = getArticleBundle(key);
     if (!bundle) {
-      bundle = buildArticleBundle(article);
-      const ctx = articleToPipeline(article);
-      const reliability = computeAndStoreReliabilityScores({
-        report: bundle.report,
-        results: bundle.results,
-        article: ctx,
-        reportId: `feed_${key}`,
-        authorDisplayName: article.author,
-      });
-      bundle = { ...bundle, report: applyClaimConsensusToReport(bundle.report, reliability) };
-      markArticleAnalyzed(key, bundle);
+      bundle = await analyzeArticleHeavyweight(article);
     }
 
     const reliability =

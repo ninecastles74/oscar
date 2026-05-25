@@ -18,8 +18,13 @@ export function buildConsensusFindingsSummary(
   >,
 ): string {
   const sentences: string[] = [];
+  const singleSource = report.sourceCount <= 1 || report.articleCount <= 1;
 
-  if (report.consensusScore >= 75) {
+  if (singleSource) {
+    sentences.push(
+      `OSCAR analyzed ${report.articleCount} article from a single outlet (${report.storyConfidence}% story confidence). Claims were checked against approved reference sources; cross-outlet comparison is not available for this cluster.`,
+    );
+  } else if (report.consensusScore >= 75) {
     sentences.push(
       `OSCAR compared ${report.articleCount} articles from ${report.sourceCount} outlets and found strong cross-source agreement on the core claims (${report.consensusScore}% consensus).`,
     );
@@ -35,22 +40,34 @@ export function buildConsensusFindingsSummary(
 
   if (report.overlappingClaims.length > 0) {
     const top = report.overlappingClaims[0];
-    sentences.push(
-      `${report.overlappingClaims.length} claim group${report.overlappingClaims.length === 1 ? "" : "s"} appear in multiple outlets${top ? `, including shared reporting around “${top.canonicalText.slice(0, 90)}${top.canonicalText.length > 90 ? "…" : ""}”.` : "."}`,
-    );
+    if (singleSource) {
+      sentences.push(
+        `${report.overlappingClaims.length} claim${report.overlappingClaims.length === 1 ? "" : "s"} were extracted and scored from this article${top ? `, including “${top.canonicalText.slice(0, 90)}${top.canonicalText.length > 90 ? "…" : ""}”.` : "."}`,
+      );
+    } else {
+      sentences.push(
+        `${report.overlappingClaims.length} claim group${report.overlappingClaims.length === 1 ? "" : "s"} appear in multiple outlets${top ? `, including shared reporting around “${top.canonicalText.slice(0, 90)}${top.canonicalText.length > 90 ? "…" : ""}”.` : "."}`,
+      );
+    }
   } else {
     sentences.push(
-      "Few claims clearly overlap across outlets, so the story lacks a single shared factual spine in extracted coverage.",
+      singleSource
+        ? "No verifiable claims were extracted from this article text."
+        : "Few claims clearly overlap across outlets, so the story lacks a single shared factual spine in extracted coverage.",
     );
   }
 
   if (report.disputedClaims.length > 0) {
     sentences.push(
-      `${report.disputedClaims.length} claim group${report.disputedClaims.length === 1 ? "" : "s"} show material disagreement between sources (dispute score ${report.disputeScore}%), meaning outlets contradict or qualify the same point differently.`,
+      singleSource
+        ? `${report.disputedClaims.length} claim${report.disputedClaims.length === 1 ? "" : "s"} conflict with evidence from reference sources (dispute score ${report.disputeScore}%).`
+        : `${report.disputedClaims.length} claim group${report.disputedClaims.length === 1 ? "" : "s"} show material disagreement between sources (dispute score ${report.disputeScore}%), meaning outlets contradict or qualify the same point differently.`,
     );
   } else {
     sentences.push(
-      `No major cross-source factual disputes were flagged among aligned claims (dispute score ${report.disputeScore}%).`,
+      singleSource
+        ? `No major disputes were flagged against reference evidence (dispute score ${report.disputeScore}%).`
+        : `No major cross-source factual disputes were flagged among aligned claims (dispute score ${report.disputeScore}%).`,
     );
   }
 

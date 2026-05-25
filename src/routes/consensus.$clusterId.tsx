@@ -34,8 +34,8 @@ export const Route = createFileRoute("/consensus/$clusterId")({
     }
 
     const stories = storiesForCluster(params.clusterId);
-    if (stories.length < 2) {
-      return { error: { message: "Need at least 2 articles for consensus" }, cluster };
+    if (stories.length < 1) {
+      return { error: { message: "No articles in this cluster to analyze" }, cluster };
     }
 
     const result = await runStoryConsensus({

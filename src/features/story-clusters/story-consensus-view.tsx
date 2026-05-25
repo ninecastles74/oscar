@@ -18,6 +18,7 @@ function StanceIcon({ stance }: { stance: SourceAgreementStance }) {
 
 export function StoryConsensusView({ report }: { report: StoryConsensusReport }) {
   const { sourceAgreementMap: map } = report;
+  const singleSource = report.sourceCount <= 1 || report.articleCount <= 1;
   const findingsSummary =
     report.findingsSummary?.trim() || buildConsensusFindingsSummary(report);
 
@@ -53,7 +54,14 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
         <section className="rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Score breakdown</h2>
           <div className="mt-4 space-y-4">
-            <ConfidenceBar value={report.consensusScore} label={`${OSCAR.consensus} (cross-source agreement)`} />
+            <ConfidenceBar
+              value={report.consensusScore}
+              label={
+                singleSource
+                  ? `${OSCAR.consensus} (claim agreement vs. evidence)`
+                  : `${OSCAR.consensus} (cross-source agreement)`
+              }
+            />
             <ConfidenceBar value={100 - report.disputeScore} label="Agreement (inverse of dispute)" />
             <ConfidenceBar
               value={100 - report.uncertaintyScore}
@@ -64,13 +72,19 @@ export function StoryConsensusView({ report }: { report: StoryConsensusReport })
         </section>
 
         <section className="rounded-xl border bg-card p-6">
-          <h2 className="font-serif text-xl font-semibold">Overlapping claims</h2>
+          <h2 className="font-serif text-xl font-semibold">
+            {singleSource ? "Analyzed claims" : "Overlapping claims"}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Claims multiple outlets report on the same event
+            {singleSource
+              ? "Claims extracted from this article and checked against reference sources"
+              : "Claims multiple outlets report on the same event"}
           </p>
           <ul className="mt-4 max-h-64 space-y-3 overflow-y-auto text-sm">
             {report.overlappingClaims.length === 0 ? (
-              <li className="text-muted-foreground">No multi-source overlap detected.</li>
+              <li className="text-muted-foreground">
+                {singleSource ? "No claims extracted from this article." : "No multi-source overlap detected."}
+              </li>
             ) : (
               report.overlappingClaims.map((c) => (
                 <li key={c.groupId} className="rounded-md border bg-secondary/20 p-3">
