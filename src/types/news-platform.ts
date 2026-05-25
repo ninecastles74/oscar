@@ -436,6 +436,7 @@ export interface GeminiProviderMeta {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+    runtimeEnvKeys?: string[];
 }
 
 export interface ModelClaimVerdict {

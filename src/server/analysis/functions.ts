@@ -8,6 +8,7 @@ import {
   getManualAnalysisStatus,
 } from "./manual";
 import { runInWorkerBackground } from "../news/worker-env";
+import { captureWorkerEnvSnapshot } from "../env/server-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -73,8 +74,14 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     requestId,
   });
 
+  const envSnapshot = captureWorkerEnvSnapshot();
+  console.log(
+    "[submitManualAnalysis] env keys detected:",
+    Object.keys(envSnapshot).filter((k) => /API_KEY|GEMINI|GOOGLE_AI/i.test(k)).join(", ") || "(none)",
+  );
+
   runInWorkerBackground(
-    executeManualAnalysis(requestId).catch((err) => {
+    executeManualAnalysis(requestId, envSnapshot).catch((err) => {
       console.error(
         "[submitManualAnalysis] background failed:",
         err instanceof Error ? err.message : err,

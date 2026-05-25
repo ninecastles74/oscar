@@ -106,7 +106,14 @@ export function beginManualAnalysis(input: BeginManualAnalysisInput): {
 }
 
 /** Run the full pipeline for an existing manual request (background-safe). */
-export async function executeManualAnalysis(requestId: string): Promise<void> {
+export async function executeManualAnalysis(
+  requestId: string,
+  envSnapshot?: Record<string, unknown>,
+): Promise<void> {
+  if (envSnapshot && Object.keys(envSnapshot).length > 0) {
+    const { setWorkerBindings } = await import("../news/worker-env");
+    setWorkerBindings(envSnapshot);
+  }
   const request = await loadManualRequest(requestId);
   if (!request?.submission) return;
 

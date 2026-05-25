@@ -1,4 +1,4 @@
-import { isServerEnvTruthy } from "../env/server-env";
+import { isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
 import type {
   AnalysisReport,
   EvidenceItem,
@@ -225,6 +225,7 @@ export async function runMultiModelVerification(
     claimsWithGoogleSearch,
     totalSearchQueries,
     totalTokens: totalGeminiTokens > 0 ? totalGeminiTokens : undefined,
+    runtimeEnvKeys: listDetectedAiEnvKeys(),
   };
 
   const geminiNote = isGoogleAiConfigured()
