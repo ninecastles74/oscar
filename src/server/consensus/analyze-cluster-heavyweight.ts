@@ -5,6 +5,7 @@ import { computeAndStoreReliabilityScores } from "../reliability/engine";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { extractDomain } from "../news/utils/url";
 import { stableArticleId } from "../news/utils/text";
+import { buildArticlePageScores } from "./article-page-scores";
 import {
   getArticleBundle,
   markArticleAnalyzed,
@@ -76,7 +77,13 @@ export async function analyzeArticleHeavyweight(
     results,
   };
 
-  markArticleAnalyzed(analyzed.articleId, analyzed);
+  const pageScores = buildArticlePageScores(
+    analyzed.articleId,
+    reliability,
+    reportWithConsensus,
+    null,
+  );
+  markArticleAnalyzed(analyzed.articleId, analyzed, pageScores);
   return analyzed;
 }
 

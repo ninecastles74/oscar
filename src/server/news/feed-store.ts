@@ -14,6 +14,13 @@ import {
   getStoryConsensus,
   hydrateStoryConsensusReports,
 } from "../consensus/store";
+import { buildArticlePageScores } from "../consensus/article-page-scores";
+import {
+  getArticlePageScores,
+  hydrateArticlePageScores,
+  listArticlePageScores,
+  saveArticlePageScores,
+} from "./article-score-store";
 import type { IngestNewsResult } from "./ingest";
 import {
   loadFeedStateFromKv,
@@ -143,6 +150,7 @@ export async function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): Pro
     state.clusters.set(cluster.id, cluster);
   }
   hydrateStoryConsensusReports(snapshot.consensusReports ?? []);
+  hydrateArticlePageScores(snapshot.articlePageScores ?? []);
   state.top100ClusterIds = snapshot.top100ClusterIds;
   state.lastIngestAt = snapshot.lastIngestAt;
   state.lastAnalysisAt = snapshot.lastAnalysisAt;
@@ -163,6 +171,7 @@ export function exportFeedSnapshot(): PersistedFeedState {
     lastIngestAt: state.lastIngestAt,
     lastAnalysisAt: state.lastAnalysisAt,
     consensusReports,
+    articlePageScores: listArticlePageScores(),
   };
 }
 
@@ -286,6 +295,7 @@ export function getUnanalyzedArticleIds(articleIds?: string[]): string[] {
 export function markArticleAnalyzed(
   articleId: string,
   bundle: AnalyzedArticleBundle,
+  pageScores?: import("@/types/article-page-scores").ArticlePageScores,
 ): void {
   const a = state.articles.get(articleId);
   if (!a) return;
@@ -295,7 +305,10 @@ export function markArticleAnalyzed(
     analysisVersion: (a.analysisVersion ?? 0) + 1,
   });
   state.articleBundles.set(articleId, bundle);
+  if (pageScores) saveArticlePageScores(pageScores);
 }
+
+export { getArticlePageScores, saveArticlePageScores };
 
 export function getArticleBundle(articleId: string): AnalyzedArticleBundle | undefined {
   return state.articleBundles.get(articleId);

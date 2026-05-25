@@ -14,6 +14,8 @@ import { VerdictBadge } from "@/features/claims/verdict-badge";
 import { SourceBadge } from "@/features/sources/source-badge";
 import { ArticleElevenScoresPanel } from "@/features/explainability/article-eleven-scores-panel";
 import type { ArticleStoryScores } from "@/features/explainability/article-eleven-scores-panel";
+import { articlePageScoresToExplainability } from "@/features/explainability/article-page-scores-utils";
+import type { ArticlePageScores } from "@/types/article-page-scores";
 import { ArticleWeightedScorePanel } from "@/features/explainability/article-weighted-score-panel";
 import { ReliabilityScoresPanel } from "@/features/explainability/reliability-scores-panel";
 import type { StoryConsensusReport, TransparencyExplainabilityBundle } from "@/types/news-platform";
@@ -54,9 +56,9 @@ export function ReportView({
   );
 
   const openClaimConfidence = () => {
-    if (!explainability) return;
+    if (!articleExplainability) return;
     setClaimExplain({
-      ...explainability.article,
+      ...articleExplainability,
       entityLabel: "Claim verification confidence",
       whyScoreExists:
         `Overall verification confidence (${report.overallConfidence}%) is the mean confidence across extracted claims — distinct from article reliability (${explainability.article.overallScore}/100).`,
@@ -102,21 +104,31 @@ export function ReportView({
         </button>
       </div>
 
-      {explainability && articlePageMode && (
+      {articlePageMode && (articleExplainability || articlePageScores) && (
         <div className="mt-8 space-y-8">
           <ArticleElevenScoresPanel
-            articleExplainability={explainability.article}
+            articleExplainability={articleExplainability}
+            articlePageScores={articlePageScores}
+            articleTitle={report.title}
             storyExplainability={
-              "story" in explainability && explainability.story ? explainability.story : null
+              explainability && "story" in explainability && explainability.story
+                ? explainability.story
+                : null
             }
-            storyScores={storyScores}
+            storyScores={effectiveStoryScores}
             storyReport={storyReport}
           />
-          <ArticleWeightedScorePanel
-            explainability={explainability.article}
-            verificationConfidence={report.overallConfidence}
-          />
-          <ReliabilityScoresPanel explainability={explainability} hideArticle />
+          {articleExplainability ? (
+            <>
+              <ArticleWeightedScorePanel
+                explainability={articleExplainability}
+                verificationConfidence={report.overallConfidence}
+              />
+              {explainability ? (
+                <ReliabilityScoresPanel explainability={explainability} hideArticle />
+              ) : null}
+            </>
+          ) : null}
         </div>
       )}
 

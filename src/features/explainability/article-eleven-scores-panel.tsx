@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { ScoreExplainability, StoryConsensusReport } from "@/types/news-platform";
+import type { ArticlePageScores } from "@/types/article-page-scores";
+import { articlePageScoresToExplainability } from "./article-page-scores-utils";
 import { OSCAR } from "@/lib/brand";
 import { ClickableScore } from "./clickable-score";
 import { ScoreExplainabilitySheet } from "./score-explainability-sheet";
@@ -14,12 +16,8 @@ const CATEGORY_ORDER: { id: string; label: string; defaultWeightPercent: number 
   { id: "source_transparency", label: "Source Transparency", defaultWeightPercent: 15 },
 ];
 
-export interface ArticleStoryScores {
-  consensusScore: number;
-  disputeScore: number;
-  uncertaintyScore: number;
-  storyConfidence: number;
-}
+export type { ArticleStoryScores } from "@/types/article-page-scores";
+import type { ArticleStoryScores } from "@/types/article-page-scores";
 
 function withScore(
   base: ScoreExplainability,
@@ -40,11 +38,16 @@ function withScore(
  */
 export function ArticleElevenScoresPanel({
   articleExplainability,
+  articlePageScores,
+  articleTitle,
   storyExplainability,
   storyScores,
   storyReport,
 }: {
-  articleExplainability: ScoreExplainability;
+  articleExplainability?: ScoreExplainability | null;
+  /** Lean scores from server (used when full explainability is unavailable). */
+  articlePageScores?: ArticlePageScores | null;
+  articleTitle?: string;
   storyExplainability: ScoreExplainability | null;
   storyScores: ArticleStoryScores | null;
   storyReport?: StoryConsensusReport | null;
@@ -52,19 +55,58 @@ export function ArticleElevenScoresPanel({
   const [active, setActive] = useState<ScoreExplainability | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  const resolvedArticleExplainability =
+    articleExplainability ??
+    (articlePageScores
+      ? articlePageScoresToExplainability(
+          articlePageScores,
+          articleTitle ?? articlePageScores.articleId,
+        )
+      : null);
+
+  if (!resolvedArticleExplainability) {
+    return (
+      <section className="rounded-xl border border-dashed bg-card p-6 text-center">
+        <h2 className="font-serif text-2xl font-semibold">Article & story scores</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Scores are not available yet. Open the cluster consensus page or wait for scheduled
+          analysis to finish.
+        </p>
+      </section>
+    );
+  }
+
   const open = (exp: ScoreExplainability) => {
     setActive(exp);
     setSheetOpen(true);
   };
 
+  const effectiveStoryScores =
+    storyScores ?? articlePageScores?.story ?? null;
+
   const stepById = new Map(
-    articleExplainability.calculationSteps.map((s) => [s.categoryId, s]),
+    resolvedArticleExplainability.calculationSteps.map((s) => [s.categoryId, s]),
   );
+  if (articlePageScores) {
+    for (const c of articlePageScores.categories) {
+      if (!stepById.has(c.id)) {
+        stepById.set(c.id, {
+          categoryId: c.id,
+          label: c.label,
+          score: c.score,
+          weightPercent: c.weightPercent,
+          weightedContribution: Math.round((c.score * c.weightPercent) / 100),
+          description: c.description ?? c.label,
+          formulaSummary: c.formulaSummary ?? c.label,
+        });
+      }
+    }
+  }
 
   const storyBase =
     storyExplainability ??
     ({
-      ...articleExplainability,
+      ...resolvedArticleExplainability,
       entityType: "story",
       entityLabel: storyReport?.title ?? "Story cluster",
       whyScoreExists: "Story-level scores require cluster consensus analysis.",
@@ -81,50 +123,50 @@ export function ArticleElevenScoresPanel({
   }[] = [
     {
       key: "consensus",
-      score: storyScores?.consensusScore ?? null,
+      score: effectiveStoryScores?.consensusScore ?? null,
       label: `${OSCAR.consensus} score`,
       sublabel: "Cross-source agreement",
-      onClick: storyScores
-        ? () => open(withScore(storyBase, storyScores.consensusScore, "Consensus"))
+      onClick: effectiveStoryScores
+        ? () => open(withScore(storyBase, effectiveStoryScores.consensusScore, "Consensus"))
         : undefined,
-      disabled: !storyScores,
+      disabled: !effectiveStoryScores,
     },
     {
       key: "dispute",
-      score: storyScores?.disputeScore ?? null,
+      score: effectiveStoryScores?.disputeScore ?? null,
       label: "Dispute score",
       sublabel: "Share of disputed claims",
-      onClick: storyScores
-        ? () => open(withScore(storyBase, storyScores.disputeScore, "Dispute"))
+      onClick: effectiveStoryScores
+        ? () => open(withScore(storyBase, effectiveStoryScores.disputeScore, "Dispute"))
         : undefined,
-      disabled: !storyScores,
+      disabled: !effectiveStoryScores,
     },
     {
       key: "uncertainty",
-      score: storyScores?.uncertaintyScore ?? null,
+      score: effectiveStoryScores?.uncertaintyScore ?? null,
       label: "Uncertainty score",
       sublabel: "Ambiguity and missing context",
-      onClick: storyScores
-        ? () => open(withScore(storyBase, storyScores.uncertaintyScore, "Uncertainty"))
+      onClick: effectiveStoryScores
+        ? () => open(withScore(storyBase, effectiveStoryScores.uncertaintyScore, "Uncertainty"))
         : undefined,
-      disabled: !storyScores,
+      disabled: !effectiveStoryScores,
     },
     {
       key: "story-confidence",
-      score: storyScores?.storyConfidence ?? null,
+      score: effectiveStoryScores?.storyConfidence ?? null,
       label: "Story confidence",
       sublabel: "Overall cluster confidence",
-      onClick: storyScores
-        ? () => open(withScore(storyBase, storyScores.storyConfidence, "Story confidence"))
+      onClick: effectiveStoryScores
+        ? () => open(withScore(storyBase, effectiveStoryScores.storyConfidence, "Story confidence"))
         : undefined,
-      disabled: !storyScores,
+      disabled: !effectiveStoryScores,
     },
     {
       key: "weighted-article",
-      score: articleExplainability.overallScore,
+      score: resolvedArticleExplainability.overallScore,
       label: "Weighted article score",
       sublabel: "Six-category composite (this article)",
-      onClick: () => open(articleExplainability),
+      onClick: () => open(resolvedArticleExplainability),
     },
     ...CATEGORY_ORDER.map((cat) => {
       const step = stepById.get(cat.id);
@@ -137,9 +179,9 @@ export function ArticleElevenScoresPanel({
         onClick: step
           ? () => {
               const stepExp: ScoreExplainability = {
-                ...articleExplainability,
+                ...resolvedArticleExplainability,
                 overallScore: step.score,
-                entityLabel: `${articleExplainability.entityLabel} — ${cat.label}`,
+                entityLabel: `${resolvedArticleExplainability.entityLabel} — ${cat.label}`,
                 whyScoreExists: step.description,
                 howCalculated: step.formulaSummary,
                 weightedFormula: `${step.score} × ${weight}% weight`,
@@ -162,7 +204,7 @@ export function ArticleElevenScoresPanel({
           weighted reliability composite for this article, and six category inputs. Click any score
           for how it was calculated.
         </p>
-        {!storyScores && (
+        {!effectiveStoryScores && (
           <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
             Story scores appear after cluster consensus is available. Open the cluster consensus
             page first if scores show as unavailable.
@@ -187,7 +229,7 @@ export function ArticleElevenScoresPanel({
                 score={t.score}
                 label={t.label}
                 sublabel={t.sublabel}
-                onClick={t.onClick ?? (() => open(articleExplainability))}
+                onClick={t.onClick ?? (() => open(resolvedArticleExplainability))}
               />
             ),
           )}

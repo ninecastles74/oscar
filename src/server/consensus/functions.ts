@@ -9,11 +9,15 @@ import {
 } from "./analyze-cluster-heavyweight";
 import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import { getClusterArticles, getStoryConsensus, saveStoryConsensus } from "./store";
+import { buildArticlePageScores, type ArticlePageScores } from "./article-page-scores";
+import { mergeStoryIntoArticlePageScores } from "../news/article-score-store";
 import {
   getArticleBundle,
+  getArticlePageScores,
   getClusterArticlesFromStore,
   getStoredClusterHydrated,
   persistFeedToKv,
+  saveArticlePageScores,
   updateClusterFromConsensus,
 } from "../news/feed-store";
 import { stableArticleId } from "../news/utils/text";
@@ -129,18 +133,36 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
   };
 }
 
+function syncStoryScoresToArticlePages(
+  articles: NewsArticle[],
+  storyReport: StoryConsensusReport,
+): void {
+  const story = {
+    consensusScore: storyReport.consensusScore,
+    disputeScore: storyReport.disputeScore,
+    uncertaintyScore: storyReport.uncertaintyScore,
+    storyConfidence: storyReport.storyConfidence,
+  };
+  const ids = articles.map((a) => a.id || stableArticleId(a.url));
+  mergeStoryIntoArticlePageScores(story, ids);
+}
+
 async function ensureFeedConsensusReport(
   cluster: StoryCluster,
   articles: NewsArticle[],
 ): Promise<StoryConsensusReport> {
   const cached = getStoryConsensus(cluster.id);
-  if (cached) return cached;
+  if (cached) {
+    syncStoryScoresToArticlePages(articles, cached);
+    return cached;
+  }
   const report =
     articles.length === 1
       ? await runHeavyweightClusterAnalysis(cluster, articles)
       : runStoryConsensusForCluster(cluster, articles);
   saveStoryConsensus(report);
   updateClusterFromConsensus(cluster.id, report);
+  syncStoryScoresToArticlePages(articles, report);
   void persistFeedToKv();
   return report;
 }
@@ -190,7 +212,10 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     }
     const articles = getClusterArticlesFromStore(data.clusterId);
     const article = articles.find(
-      (a) => a.id === data.articleId || stableArticleId(a.url) === data.articleId,
+      (a) =>
+        a.id === data.articleId ||
+        a.url === data.articleId ||
+        stableArticleId(a.url) === data.articleId,
     );
     if (!article) {
       return { error: { code: "NOT_FOUND", message: "Article not in this cluster" } };
@@ -200,6 +225,17 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     let bundle = getArticleBundle(key);
     if (!bundle) {
       bundle = await analyzeArticleHeavyweight(article);
+    }
+
+    let storyReport = getStoryConsensus(data.clusterId);
+    if (!storyReport) {
+      try {
+        storyReport = await ensureFeedConsensusReport(cluster, articles);
+      } catch {
+        storyReport = undefined;
+      }
+    } else {
+      syncStoryScoresToArticlePages(articles, storyReport);
     }
 
     const reliability =
@@ -216,33 +252,37 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       return { error: { code: "ANALYSIS_FAILED", message: "Could not build reliability scores" } };
     }
 
-    let storyReport = getStoryConsensus(data.clusterId);
-    if (!storyReport) {
-      storyReport = await ensureFeedConsensusReport(cluster, articles);
+    const articlePageScores = buildArticlePageScores(
+      bundle.articleId,
+      reliability,
+      bundle.report,
+      storyReport ?? null,
+    );
+    saveArticlePageScores(articlePageScores);
+    void persistFeedToKv();
+
+    let explainability: ReturnType<typeof buildTransparencyExplainabilityBundle> | undefined;
+    try {
+      explainability = buildTransparencyExplainabilityBundle({
+        report: bundle.report,
+        bundle: reliability,
+        results: bundle.results,
+        storyReport,
+      });
+    } catch (err) {
+      console.warn(
+        "[loadFeedArticleAnalysis] explainability build failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
-
-    const explainability = buildTransparencyExplainabilityBundle({
-      report: bundle.report,
-      bundle: reliability,
-      results: bundle.results,
-      storyReport,
-    });
-
-    const storyScores = storyReport
-      ? {
-          consensusScore: storyReport.consensusScore,
-          disputeScore: storyReport.disputeScore,
-          uncertaintyScore: storyReport.uncertaintyScore,
-          storyConfidence: storyReport.storyConfidence,
-        }
-      : null;
 
     return {
       clusterId: data.clusterId,
       report: analysisReportToManualReport(bundle.report),
       platformReport: bundle.report,
+      articlePageScores,
       explainability,
       storyReport: storyReport ?? null,
-      storyScores,
+      storyScores: articlePageScores.story,
     };
   });

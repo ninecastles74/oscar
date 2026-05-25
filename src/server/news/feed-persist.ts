@@ -1,5 +1,6 @@
 import type { StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { getFeedKv, isFeedKvConfigured } from "./worker-env";
+import type { ArticlePageScores } from "@/types/article-page-scores";
 import type { StoredArticle, StoredCluster } from "./feed-store";
 
 const FEED_STATE_KEY = "oscar:feed:state:v1";
@@ -13,6 +14,7 @@ export interface PersistedFeedState {
   lastIngestAt?: string;
   lastAnalysisAt?: string;
   consensusReports?: StoryConsensusReport[];
+  articlePageScores?: ArticlePageScores[];
 }
 
 export function exportFeedState(input: {

@@ -23,7 +23,9 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
       clusterId: params.clusterId,
       report: result.report,
       platformReport: result.platformReport,
-      explainability: result.explainability,
+      explainability: "explainability" in result ? result.explainability : undefined,
+      articlePageScores:
+        "articlePageScores" in result ? result.articlePageScores : undefined,
       storyReport: "storyReport" in result ? result.storyReport : null,
       storyScores: "storyScores" in result ? result.storyScores : null,
     };
@@ -66,6 +68,7 @@ function FeedArticleAnalysisRoute() {
         report={data.report}
         platformReport={data.platformReport}
         explainability={data.explainability}
+        articlePageScores={"articlePageScores" in data ? data.articlePageScores : null}
         hideTopBackLink
         articlePageMode
         storyScores={"storyScores" in data ? data.storyScores : null}
