@@ -4,8 +4,12 @@ import type {
   OrganizationDirectoryRow,
   SourcesDirectory,
 } from "@/types/sources-directory";
-import { AUTHORS, type MockAuthor } from "@/lib/mock-data/authors";
 import { APPROVED_SOURCES } from "../analysis/sources";
+import {
+  finalizeAuthorDirectoryRows,
+  mergeAuthorsFromScoredArticles,
+} from "./author-rows";
+import { isValidAuthorByline } from "./author-byline";
 import {
   getAuthorScores,
   getLatestAuthor,
@@ -62,20 +66,6 @@ function rowFromRegistry(s: ArticleSource): OrganizationDirectoryRow {
     bias: s.bias,
     approved: s.approved,
     averageScore: computed?.overallScore ?? s.reliability,
-    rollingAverage: computed?.rollingAverage ?? null,
-    articlesScored: computed?.articlesScored ?? 0,
-    scoreSource: computed ? "computed" : "registry",
-    trend: computed?.trend?.direction ?? null,
-  };
-}
-
-function rowFromAuthorMock(a: MockAuthor): AuthorDirectoryRow {
-  const computed = getLatestAuthor(a.authorId);
-  return {
-    authorId: a.authorId,
-    displayName: computed?.displayName ?? a.displayName,
-    outlet: a.outlet,
-    averageScore: computed?.overallScore ?? a.reliability,
     rollingAverage: computed?.rollingAverage ?? null,
     articlesScored: computed?.articlesScored ?? 0,
     scoreSource: computed ? "computed" : "registry",
@@ -231,6 +221,7 @@ function buildRealAuthorRows(db: NonNullable<Awaited<ReturnType<typeof loadSupab
   for (const authorId of listAllAuthorIds()) {
     const computed = getLatestAuthor(authorId);
     if (!computed) continue;
+    if (!isValidAuthorByline(computed.displayName)) continue;
     map.set(authorId, {
       authorId,
       displayName: computed.displayName,
@@ -244,6 +235,7 @@ function buildRealAuthorRows(db: NonNullable<Awaited<ReturnType<typeof loadSupab
   }
 
   for (const [slug, hit] of db.byAuthorSlug) {
+    if (!isValidAuthorByline(hit.displayName)) continue;
     const existing = map.get(slug);
     if (existing?.scoreSource === "computed") {
       if (hit.hasScore) {
@@ -286,7 +278,7 @@ function applySupabaseToOrganizations(
   });
 }
 
-/** Build public Sources directory from registry, mock authors, in-memory scores, and optional Supabase. */
+/** Build public Sources directory from registry, in-memory scores, feed bylines, and optional Supabase. */
 export async function buildSourcesDirectory(): Promise<SourcesDirectory> {
   try {
     return await buildSourcesDirectoryInner();
@@ -303,17 +295,16 @@ function buildSourcesDirectoryFallback(): SourcesDirectory {
   const organizations = APPROVED_SOURCES.map((s) => rowFromRegistry(s)).sort(
     (a, b) => b.averageScore - a.averageScore,
   );
-  const authors = AUTHORS.map((a) => rowFromAuthorMock(a)).sort((a, b) => b.averageScore - a.averageScore);
   return {
     organizations,
-    authors,
+    authors: [],
     meta: {
       organizationCount: organizations.length,
-      authorCount: authors.length,
+      authorCount: 0,
       computedOrganizationCount: 0,
       computedAuthorCount: 0,
       supabaseMerged: false,
-      usingMockAuthors: true,
+      usingMockAuthors: false,
     },
   };
 }
@@ -350,18 +341,16 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
   const db = await loadSupabaseScoreMaps();
   const supabaseMerged = Boolean(db);
 
-  let authors: AuthorDirectoryRow[];
-  if (!hasRealImportedAuthors(db)) {
-    authors = AUTHORS.map((a) => rowFromAuthorMock(a));
-  } else if (db) {
-    authors = buildRealAuthorRows(db);
-  } else {
-    authors = buildRealAuthorRows({
-      byDomain: new Map(),
-      byAuthorSlug: new Map(),
-      importedAuthorCount: 0,
-    });
-  }
+  let authors: AuthorDirectoryRow[] =
+    hasRealImportedAuthors(db) && db
+      ? buildRealAuthorRows(db)
+      : hasRealImportedAuthors(db)
+        ? buildRealAuthorRows({
+            byDomain: new Map(),
+            byAuthorSlug: new Map(),
+            importedAuthorCount: 0,
+          })
+        : [];
 
   if (db) {
     organizations = applySupabaseToOrganizations(organizations, db).sort(
@@ -369,22 +358,17 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
     );
   }
 
-  authors = authors.sort((a, b) => b.averageScore - a.averageScore);
-
   await ensureFeedHydratedFromKv();
   const feedArticles = listAllStoredArticles();
   const feedMerged = mergeFeedIntoSourcesDirectory(organizations, authors, feedArticles);
   organizations = feedMerged.organizations;
-  authors = feedMerged.authors;
-
-  const useMockAuthors =
-    !hasRealImportedAuthors(db) && feedMerged.feedAuthorCount === 0;
-  if (useMockAuthors) {
-    authors = AUTHORS.map((a) => rowFromAuthorMock(a)).sort((a, b) => b.averageScore - a.averageScore);
-  }
+  authors = mergeAuthorsFromScoredArticles(feedMerged.authors, feedArticles);
+  authors = finalizeAuthorDirectoryRows(authors);
 
   const computedOrganizationCount = organizations.filter((o) => o.scoreSource !== "registry").length;
-  const computedAuthorCount = authors.filter((a) => a.scoreSource !== "registry").length;
+  const computedAuthorCount = authors.filter(
+    (a) => a.scoreSource === "computed" || a.scoreSource === "database",
+  ).length;
 
   return {
     organizations,
@@ -395,7 +379,7 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
       computedOrganizationCount,
       computedAuthorCount,
       supabaseMerged,
-      usingMockAuthors: useMockAuthors,
+      usingMockAuthors: false,
       feedOrganizationsAdded: feedMerged.feedOrgCount,
       feedAuthorsAdded: feedMerged.feedAuthorCount,
       feedArticlesSeen: feedArticles.length,

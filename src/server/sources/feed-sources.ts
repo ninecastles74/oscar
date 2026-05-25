@@ -3,13 +3,20 @@ import type { AuthorDirectoryRow, OrganizationDirectoryRow } from "@/types/sourc
 import { APPROVED_SOURCES } from "../analysis/sources";
 import { authorIdFromName, organizationIdFromDomain } from "../reliability/utils/entity-ids";
 import { resolvePublisher } from "../news/resolve-publisher";
+import { isValidAuthorByline } from "./author-byline";
+import { applyStoredAuthorScore } from "./author-rows";
 
-/** Merge live feed articles into the public Sources directory (orgs + bylines). */
+/** Merge live feed articles into the public Sources directory (orgs + person bylines). */
 export function mergeFeedIntoSourcesDirectory(
   organizations: OrganizationDirectoryRow[],
   authors: AuthorDirectoryRow[],
   articles: NewsArticle[],
-): { organizations: OrganizationDirectoryRow[]; authors: AuthorDirectoryRow[]; feedOrgCount: number; feedAuthorCount: number } {
+): {
+  organizations: OrganizationDirectoryRow[];
+  authors: AuthorDirectoryRow[];
+  feedOrgCount: number;
+  feedAuthorCount: number;
+} {
   if (!articles.length) {
     return { organizations, authors, feedOrgCount: 0, feedAuthorCount: 0 };
   }
@@ -56,37 +63,55 @@ export function mergeFeedIntoSourcesDirectory(
     }
 
     const byline = article.author?.trim();
-    if (!byline) continue;
+    if (!byline || !isValidAuthorByline(byline, pub.sourceName)) continue;
+
     const authorId = authorIdFromName(byline);
     if (!authorId) continue;
     authorFeedCount.set(authorId, (authorFeedCount.get(authorId) ?? 0) + 1);
+    const feedCount = authorFeedCount.get(authorId) ?? 0;
 
     const existingAuthor = authorMap.get(authorId);
     if (existingAuthor) {
-      const count = authorFeedCount.get(authorId) ?? 0;
-      authorMap.set(authorId, {
-        ...existingAuthor,
-        outlet: existingAuthor.outlet ?? pub.sourceName,
-        articlesScored: Math.max(existingAuthor.articlesScored, count),
-      });
+      authorMap.set(
+        authorId,
+        applyStoredAuthorScore(
+          {
+            ...existingAuthor,
+            displayName: existingAuthor.displayName || byline,
+            outlet: existingAuthor.outlet ?? pub.sourceName,
+            articlesScored: feedCount,
+          },
+          feedCount,
+        ),
+      );
     } else {
       feedAuthorCount += 1;
-      authorMap.set(authorId, {
+      authorMap.set(
         authorId,
-        displayName: byline,
-        outlet: pub.sourceName,
-        averageScore: 0,
-        rollingAverage: null,
-        articlesScored: authorFeedCount.get(authorId) ?? 1,
-        scoreSource: "registry",
-        trend: null,
-      });
+        applyStoredAuthorScore(
+          {
+            authorId,
+            displayName: byline,
+            outlet: pub.sourceName,
+            averageScore: 0,
+            rollingAverage: null,
+            articlesScored: feedCount,
+            scoreSource: "registry",
+            trend: null,
+          },
+          feedCount,
+        ),
+      );
     }
   }
 
   return {
-    organizations: [...orgMap.values()].sort((a, b) => b.articlesScored - a.articlesScored || b.averageScore - a.averageScore),
-    authors: [...authorMap.values()].sort((a, b) => b.articlesScored - a.articlesScored || a.displayName.localeCompare(b.displayName)),
+    organizations: [...orgMap.values()].sort(
+      (a, b) => b.articlesScored - a.articlesScored || b.averageScore - a.averageScore,
+    ),
+    authors: [...authorMap.values()].sort(
+      (a, b) => b.articlesScored - a.articlesScored || a.displayName.localeCompare(b.displayName),
+    ),
     feedOrgCount,
     feedAuthorCount,
   };

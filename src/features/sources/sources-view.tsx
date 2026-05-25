@@ -75,9 +75,8 @@ function AuthorsTable({ rows }: { rows: AuthorDirectoryRow[] }) {
         <thead className="border-b bg-secondary/40 text-[11px] uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-4 py-3 text-left">Author</th>
-            <th className="px-4 py-3 text-left">Outlet</th>
             <th className="px-4 py-3 text-left">Avg. score</th>
-            <th className="px-4 py-3 text-right">Articles</th>
+            <th className="px-4 py-3 text-right">Articles scored</th>
             <th className="px-4 py-3 text-right">Source</th>
           </tr>
         </thead>
@@ -85,7 +84,6 @@ function AuthorsTable({ rows }: { rows: AuthorDirectoryRow[] }) {
           {rows.map((a) => (
             <tr key={a.authorId}>
               <td className="px-4 py-3 font-medium">{a.displayName}</td>
-              <td className="px-4 py-3 text-muted-foreground">{a.outlet ?? "—"}</td>
               <td className="px-4 py-3">
                 <ScoreBar score={a.averageScore} />
                 {a.rollingAverage != null && a.rollingAverage !== a.averageScore ? (
@@ -124,9 +122,9 @@ export function SourcesView({ directory }: { directory: SourcesDirectory }) {
           Average reliability scores for approved news organisations and tracked authors. Registry baselines come from
           the publisher list; analyzed scores update after {OSCAR.ask} and scheduled verification runs.
           {meta.supabaseMerged ? " Live scores are merged from Supabase when configured." : ""}
-          {meta.usingMockAuthors
-            ? " Sample authors are shown until the first real author is imported or scored."
-            : " Author list reflects imported and analyzed authors only."}
+          {" "}
+          The Authors tab lists journalists with analyzed reliability scores only — news organisations appear
+          under Organisations, not here.
         </p>
       </div>
 
@@ -161,7 +159,8 @@ export function SourcesView({ directory }: { directory: SourcesDirectory }) {
         <OrganizationsTable rows={organizations} />
       ) : authors.length === 0 ? (
         <div className="rounded-xl border bg-card px-6 py-12 text-center text-sm text-muted-foreground">
-          No authors yet. Import or score an author via analysis to populate this list.
+          No scored authors yet. Run {OSCAR.ask} on articles with journalist bylines, or wait for scheduled
+          feed analysis — publisher names and wire services are excluded from this list.
         </div>
       ) : (
         <AuthorsTable rows={authors} />
