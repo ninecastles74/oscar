@@ -3,5 +3,13 @@ import { buildSourcesDirectory } from "./directory";
 
 /** News organisations and authors with average reliability scores. */
 export const getSourcesDirectory = createServerFn({ method: "GET" }).handler(async () => {
-  return buildSourcesDirectory();
+  try {
+    return await buildSourcesDirectory();
+  } catch (err) {
+    console.error(
+      "[getSourcesDirectory] handler failed:",
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
 });

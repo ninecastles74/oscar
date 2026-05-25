@@ -1,4 +1,9 @@
 import type { ArticleSource } from "@/types/news-platform";
+import type {
+  AuthorDirectoryRow,
+  OrganizationDirectoryRow,
+  SourcesDirectory,
+} from "@/types/sources-directory";
 import { AUTHORS, type MockAuthor } from "@/lib/mock-data/authors";
 import { APPROVED_SOURCES } from "../analysis/sources";
 import {
@@ -11,45 +16,12 @@ import {
 import { organizationIdFromDomain } from "../reliability/utils/entity-ids";
 import { getSupabaseAdmin } from "../supabase/client";
 
-export type ScoreSource = "computed" | "registry" | "database";
-
-export interface OrganizationDirectoryRow {
-  sourceId: string;
-  organizationId: string;
-  name: string;
-  domain: string;
-  bias: string;
-  approved: boolean;
-  averageScore: number;
-  rollingAverage: number | null;
-  articlesScored: number;
-  scoreSource: ScoreSource;
-  trend: string | null;
-}
-
-export interface AuthorDirectoryRow {
-  authorId: string;
-  displayName: string;
-  outlet: string | null;
-  averageScore: number;
-  rollingAverage: number | null;
-  articlesScored: number;
-  scoreSource: ScoreSource;
-  trend: string | null;
-}
-
-export interface SourcesDirectory {
-  organizations: OrganizationDirectoryRow[];
-  authors: AuthorDirectoryRow[];
-  meta: {
-    organizationCount: number;
-    authorCount: number;
-    computedOrganizationCount: number;
-    computedAuthorCount: number;
-    supabaseMerged: boolean;
-    usingMockAuthors: boolean;
-  };
-}
+export type {
+  AuthorDirectoryRow,
+  OrganizationDirectoryRow,
+  ScoreSource,
+  SourcesDirectory,
+} from "@/types/sources-directory";
 
 type DbSourceScore = {
   source_id: string;
@@ -114,6 +86,11 @@ type DbAuthorEntry = DbAuthorScore & {
   hasScore: boolean;
 };
 
+function num(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 async function loadSupabaseScoreMaps(): Promise<{
   byDomain: Map<string, DbSourceScore & { name: string; bias: string; approved: boolean; slug: string }>;
   byAuthorSlug: Map<string, DbAuthorEntry>;
@@ -122,68 +99,103 @@ async function loadSupabaseScoreMaps(): Promise<{
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
 
-  const [{ data: sources, error: srcErr }, { data: sourceScores, error: ssErr }, { data: authors, error: authErr }, { data: authorScores, error: asErr }] =
-    await Promise.all([
-      supabase.from("sources").select("id, slug, name, domain, bias, reliability, approved"),
-      supabase
+  try {
+    const byDomain = new Map<
+      string,
+      DbSourceScore & { name: string; bias: string; approved: boolean; slug: string }
+    >();
+    const byAuthorSlug = new Map<string, DbAuthorEntry>();
+    let importedAuthorCount = 0;
+
+    const { data: sources, error: srcErr } = await supabase
+      .from("sources")
+      .select("id, slug, name, domain, bias, reliability, approved");
+
+    if (srcErr) {
+      console.error("[sources-directory] sources query failed:", srcErr.message);
+    } else if (sources?.length) {
+      const { data: sourceScores, error: ssErr } = await supabase
         .from("source_scores")
         .select("source_id, overall_score, rolling_average, articles_scored, trend_direction")
         .eq("is_current", true)
-        .eq("topic", "General"),
-      supabase.from("authors").select("id, slug, display_name"),
-      supabase
+        .eq("topic", "General");
+
+      if (ssErr) {
+        console.error("[sources-directory] source_scores query failed:", ssErr.message);
+      } else {
+        const scoreBySourceId = new Map((sourceScores ?? []).map((s) => [s.source_id, s as DbSourceScore]));
+        for (const src of sources) {
+          const score = scoreBySourceId.get(src.id);
+          if (!score) continue;
+          byDomain.set(src.domain, {
+            source_id: score.source_id,
+            overall_score: num(score.overall_score),
+            rolling_average: num(score.rolling_average),
+            articles_scored: num(score.articles_scored),
+            trend_direction: String(score.trend_direction ?? "stable"),
+            name: src.name,
+            bias: src.bias,
+            approved: src.approved,
+            slug: src.slug,
+          });
+        }
+      }
+    }
+
+    const { data: authors, error: authErr } = await supabase
+      .from("authors")
+      .select("id, slug, display_name");
+
+    if (authErr) {
+      console.error("[sources-directory] authors query failed:", authErr.message);
+    } else if (authors?.length) {
+      importedAuthorCount = authors.length;
+      const { data: authorScores, error: asErr } = await supabase
         .from("author_scores")
         .select("author_id, overall_score, rolling_average, articles_scored, trend_direction")
         .eq("is_current", true)
-        .eq("topic", "General"),
-    ]);
+        .eq("topic", "General");
 
-  if (srcErr || ssErr || authErr || asErr) {
-    console.error("[sources-directory] Supabase query failed:", srcErr?.message ?? ssErr?.message ?? authErr?.message ?? asErr?.message);
+      if (asErr) {
+        console.error("[sources-directory] author_scores query failed:", asErr.message);
+      }
+
+      const scoreByAuthorId = new Map((authorScores ?? []).map((s) => [s.author_id, s as DbAuthorScore]));
+      for (const author of authors) {
+        const score = scoreByAuthorId.get(author.id);
+        if (score) {
+          byAuthorSlug.set(author.slug, {
+            author_id: author.id,
+            overall_score: num(score.overall_score),
+            rolling_average: num(score.rolling_average),
+            articles_scored: num(score.articles_scored),
+            trend_direction: String(score.trend_direction ?? "stable"),
+            displayName: author.display_name,
+            hasScore: true,
+          });
+        } else {
+          byAuthorSlug.set(author.slug, {
+            author_id: author.id,
+            overall_score: 0,
+            rolling_average: 0,
+            articles_scored: 0,
+            trend_direction: "stable",
+            displayName: author.display_name,
+            hasScore: false,
+          });
+        }
+      }
+    }
+
+    const hasData = byDomain.size > 0 || byAuthorSlug.size > 0 || importedAuthorCount > 0;
+    return hasData ? { byDomain, byAuthorSlug, importedAuthorCount } : null;
+  } catch (err) {
+    console.error(
+      "[sources-directory] Supabase load failed:",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
-
-  const scoreBySourceId = new Map((sourceScores ?? []).map((s) => [s.source_id, s as DbSourceScore]));
-  const byDomain = new Map<
-    string,
-    DbSourceScore & { name: string; bias: string; approved: boolean; slug: string }
-  >();
-  for (const src of sources ?? []) {
-    const score = scoreBySourceId.get(src.id);
-    if (!score) continue;
-    byDomain.set(src.domain, {
-      ...score,
-      name: src.name,
-      bias: src.bias,
-      approved: src.approved,
-      slug: src.slug,
-    });
-  }
-
-  const scoreByAuthorId = new Map((authorScores ?? []).map((s) => [s.author_id, s as DbAuthorScore]));
-  const byAuthorSlug = new Map<string, DbAuthorEntry>();
-  for (const author of authors ?? []) {
-    const score = scoreByAuthorId.get(author.id);
-    if (score) {
-      byAuthorSlug.set(author.slug, {
-        ...score,
-        displayName: author.display_name,
-        hasScore: true,
-      });
-    } else {
-      byAuthorSlug.set(author.slug, {
-        author_id: author.id,
-        overall_score: 0,
-        rolling_average: 0,
-        articles_scored: 0,
-        trend_direction: "stable",
-        displayName: author.display_name,
-        hasScore: false,
-      });
-    }
-  }
-
-  return { byDomain, byAuthorSlug, importedAuthorCount: authors?.length ?? 0 };
 }
 
 function hasInMemoryRealAuthors(): boolean {
@@ -274,6 +286,37 @@ function applySupabaseToOrganizations(
 
 /** Build public Sources directory from registry, mock authors, in-memory scores, and optional Supabase. */
 export async function buildSourcesDirectory(): Promise<SourcesDirectory> {
+  try {
+    return await buildSourcesDirectoryInner();
+  } catch (err) {
+    console.error(
+      "[sources-directory] build failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return buildSourcesDirectoryFallback();
+  }
+}
+
+function buildSourcesDirectoryFallback(): SourcesDirectory {
+  const organizations = APPROVED_SOURCES.map((s) => rowFromRegistry(s)).sort(
+    (a, b) => b.averageScore - a.averageScore,
+  );
+  const authors = AUTHORS.map((a) => rowFromAuthorMock(a)).sort((a, b) => b.averageScore - a.averageScore);
+  return {
+    organizations,
+    authors,
+    meta: {
+      organizationCount: organizations.length,
+      authorCount: authors.length,
+      computedOrganizationCount: 0,
+      computedAuthorCount: 0,
+      supabaseMerged: false,
+      usingMockAuthors: true,
+    },
+  };
+}
+
+async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
   const orgMap = new Map<string, OrganizationDirectoryRow>();
   for (const s of APPROVED_SOURCES) {
     const row = rowFromRegistry(s);

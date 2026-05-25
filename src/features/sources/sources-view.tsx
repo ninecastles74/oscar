@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Building2, User } from "lucide-react";
-import type { AuthorDirectoryRow, OrganizationDirectoryRow, SourcesDirectory } from "@/server/sources/directory";
+import type { AuthorDirectoryRow, OrganizationDirectoryRow, SourcesDirectory } from "@/types/sources-directory";
 import { OSCAR } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +45,6 @@ function OrganizationsTable({ rows }: { rows: OrganizationDirectoryRow[] }) {
             <tr key={s.organizationId}>
               <td className="px-4 py-3 font-medium">{s.name}</td>
               <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{s.domain}</td>
-              <td className="px-4 py-3 text-xs">{BIAS_LABEL[s.bias] ?? s.bias}</td>
               <td className="px-4 py-3">
                 <ScoreBar score={s.averageScore} />
                 {s.rollingAverage != null && s.rollingAverage !== s.averageScore ? (
