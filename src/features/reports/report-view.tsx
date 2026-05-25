@@ -12,6 +12,7 @@ import { StatTile } from "@/components/stat-tile";
 import { ClaimPanel } from "@/features/claims/claim-panel";
 import { VerdictBadge } from "@/features/claims/verdict-badge";
 import { SourceBadge } from "@/features/sources/source-badge";
+import { ArticleWeightedScorePanel } from "@/features/explainability/article-weighted-score-panel";
 import { ReliabilityScoresPanel } from "@/features/explainability/reliability-scores-panel";
 import { TopicBadges } from "@/features/topics/topic-badges";
 import { ClickableScore } from "@/features/explainability/clickable-score";
@@ -19,6 +20,7 @@ import { ScoreExplainabilitySheet } from "@/features/explainability/score-explai
 import { useState } from "react";
 import type { ScoreExplainability } from "@/types/news-platform";
 import { OSCAR } from "@/lib/brand";
+import { cn } from "@/lib/utils";
 
 export function ReportView({
   report,
@@ -55,11 +57,21 @@ export function ReportView({
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <Link to="/analyze" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3 w-3" /> New analysis
-      </Link>
+      {!hideTopBackLink && (
+        <Link
+          to="/analyze"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> New analysis
+        </Link>
+      )}
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div
+        className={cn(
+          "flex flex-wrap items-start justify-between gap-4",
+          !hideTopBackLink && "mt-4",
+        )}
+      >
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{OSCAR.analysis} report</div>
           <h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">{report.title}</h1>
@@ -79,8 +91,12 @@ export function ReportView({
       </div>
 
       {explainability && (
-        <div className="mt-8">
-          <ReliabilityScoresPanel explainability={explainability} />
+        <div className="mt-8 space-y-8">
+          <ArticleWeightedScorePanel
+            explainability={explainability.article}
+            verificationConfidence={report.overallConfidence}
+          />
+          <ReliabilityScoresPanel explainability={explainability} hideArticle />
         </div>
       )}
 

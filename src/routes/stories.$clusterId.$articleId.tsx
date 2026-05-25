@@ -64,6 +64,7 @@ function FeedArticleAnalysisRoute() {
         report={data.report}
         platformReport={data.platformReport}
         explainability={data.explainability}
+        hideTopBackLink
       />
     </>
   );

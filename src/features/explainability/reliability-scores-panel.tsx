@@ -7,8 +7,11 @@ import type { ScoreExplainability } from "@/types/news-platform";
 
 export function ReliabilityScoresPanel({
   explainability,
+  hideArticle = false,
 }: {
   explainability: AnalysisExplainabilityBundle;
+  /** When true, article score is shown elsewhere (e.g. ArticleWeightedScorePanel). */
+  hideArticle?: boolean;
 }) {
   const [active, setActive] = useState<ScoreExplainability | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -18,21 +21,29 @@ export function ReliabilityScoresPanel({
     setSheetOpen(true);
   };
 
+  const hasPublisherOrAuthor = Boolean(explainability.source || explainability.author);
+  if (hideArticle && !hasPublisherOrAuthor) return null;
+
   return (
     <>
       <section className="rounded-xl border bg-card p-6">
-        <h2 className="font-serif text-2xl font-semibold">{OSCAR.reliability}</h2>
+        <h2 className="font-serif text-2xl font-semibold">
+          {hideArticle ? "Publisher & author context" : OSCAR.reliability}
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Why this score? Click any score to see how it was generated, contributing evidence, and
-          what reduced confidence
+          {hideArticle
+            ? "Rolling reliability averages for the outlet and byline — not the weighted score for this article alone."
+            : "Why this score? Click any score to see how it was generated, contributing evidence, and what reduced confidence"}
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <ClickableScore
-            score={explainability.article.overallScore}
-            label="Article reliability"
-            sublabel="Weighted category composite"
-            onClick={() => open(explainability.article)}
-          />
+          {!hideArticle && (
+            <ClickableScore
+              score={explainability.article.overallScore}
+              label="Article reliability"
+              sublabel="Weighted category composite"
+              onClick={() => open(explainability.article)}
+            />
+          )}
           {explainability.source && (
             <ClickableScore
               score={explainability.source.overallScore}
