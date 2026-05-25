@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { setWorkerBindings } from "./server/news/worker-env";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -71,6 +72,7 @@ type ScheduledController = { cron: string; scheduledTime: number };
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    setWorkerBindings(env);
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
@@ -81,20 +83,28 @@ export default {
     }
   },
 
-  async scheduled(controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
+  async scheduled(controller: ScheduledController, env: unknown, ctx: ExecutionContext) {
+    setWorkerBindings(env);
     const cron = controller.cron;
     const { scheduledIngestCron, isScheduledNewsEnabled } = await import(
       "./server/analysis/context"
     );
 
-    if (isScheduledNewsEnabled() && cron === scheduledIngestCron()) {
+    const ingestCron = scheduledIngestCron();
+    if (isScheduledNewsEnabled() && cron === ingestCron) {
       ctx.waitUntil(
         import("./server/jobs/news/scheduled-pipeline")
           .then(({ runScheduledNewsPipeline }) => runScheduledNewsPipeline())
-          .then((r) => console.log("[scheduled] news pipeline", r))
+          .then((r) => console.log("[scheduled] news pipeline", JSON.stringify(r)))
           .catch((err) => console.error("[scheduled] news pipeline failed", err)),
       );
       return;
+    }
+
+    if (isScheduledNewsEnabled() && cron !== ingestCron) {
+      console.warn(
+        `[scheduled] news ingest skipped: wrangler cron "${cron}" != SCHEDULED_NEWS_CRON "${ingestCron}"`,
+      );
     }
 
     const { isReliabilityJobsEnabled } = await import("./server/jobs/config");

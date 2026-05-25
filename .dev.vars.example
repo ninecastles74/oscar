@@ -6,8 +6,18 @@
 # `vite dev` / `wrangler dev` with the Cloudflare plugin.
 # =============================================================================
 
-# See .env.example for the full variable list and comments.
-# Minimal Supabase setup:
+# --- News ingest (Top 100) — minimum without paid APIs ---
+RSS_USE_DEFAULT_REGISTRY=true
+NEWS_INGEST_ENABLED_PROVIDERS=rss
+SCHEDULED_NEWS_ENABLED=true
+# Do not set SCHEDULED_NEWS_CRON unless it matches wrangler.jsonc (default 0 */8 * * *)
+
+# Optional paid providers (Wrangler secrets in production):
+# NEWS_API_KEY=
+# GNEWS_API_KEY=
+# GUARDIAN_API_KEY=
+
+# --- Supabase (analysis persistence; not required for Top 100 feed) ---
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_ENABLED=true

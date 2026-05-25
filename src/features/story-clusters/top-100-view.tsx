@@ -8,14 +8,27 @@ import { OSCAR } from "@/lib/brand";
 
 const CATS = ["All", "Politics", "World", "Business", "Technology", "Science", "Health", "Climate", "Markets"];
 
+type FeedDiagnostics = {
+  feedKvBound?: boolean;
+  feedStorage?: string;
+  configuredProviders?: string[];
+  missingConfiguration?: string[];
+  recommendations?: string[];
+  bootstrap?: { ran?: boolean; reason?: string };
+};
+
 export function Top100View({
   clusters,
   meta,
   usingLiveFeed,
+  bootstrap,
+  diagnostics,
 }: {
   clusters: Cluster[];
   meta?: { lastIngestAt?: string; lastAnalysisAt?: string; top100Count?: number };
   usingLiveFeed?: boolean;
+  bootstrap?: { ran?: boolean; reason?: string; providerErrors?: string[] };
+  diagnostics?: FeedDiagnostics;
 }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
@@ -41,6 +54,32 @@ export function Top100View({
               : ""}
             {meta.top100Count != null ? ` · ${meta.top100Count} in feed` : ""}
           </p>
+        )}
+        {!usingLiveFeed && (
+          <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
+            <p className="font-medium">Showing sample stories — live feed is empty</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {bootstrap?.ran
+                ? `Bootstrap ingest ran (${bootstrap.reason}). Refresh in a moment.`
+                : bootstrap?.reason
+                  ? `Bootstrap: ${bootstrap.reason}.`
+                  : "Configure Cloudflare vars and KV, then open this page again or wait for the 8h cron."}
+            </p>
+            {diagnostics?.missingConfiguration && diagnostics.missingConfiguration.length > 0 ? (
+              <ul className="mt-2 list-inside list-disc text-xs text-muted-foreground">
+                {diagnostics.missingConfiguration.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+            {diagnostics?.recommendations && diagnostics.recommendations.length > 0 ? (
+              <ul className="mt-2 list-inside list-disc text-xs text-muted-foreground">
+                {diagnostics.recommendations.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         )}
       </div>
 

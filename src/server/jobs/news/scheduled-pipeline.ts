@@ -5,7 +5,9 @@ import {
   setLastAnalysisAt,
   getFeedMeta,
   getClusterArticlesFromStore,
+  exportFeedSnapshot,
 } from "../../news/feed-store";
+import { saveFeedStateToKv } from "../../news/feed-persist";
 import { runHeavyweightClusterAnalysis } from "../../consensus/analyze-cluster-heavyweight";
 
 export interface ScheduledNewsRunResult {
@@ -37,8 +39,9 @@ export async function runScheduledNewsPipeline(): Promise<ScheduledNewsRunResult
 
     const merge = mergeIngestIntoFeed(ingest);
     const newArticleIds = merge.newArticleIds;
+    await saveFeedStateToKv(exportFeedSnapshot());
 
-    const top100 = getTop100Clusters();
+    const top100 = await getTop100Clusters();
     const top100Ids = new Set(top100.map((c) => c.id));
 
     const clustersToProcess = merge.affectedClusterIds.filter((id) => top100Ids.has(id));

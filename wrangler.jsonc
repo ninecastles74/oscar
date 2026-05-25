@@ -13,5 +13,9 @@
       "0 */4 * * *",
       "0 2 * * *"
     ]
-  }
+  },
+  // Required for live Top 100 across requests/cron — see docs/CLOUDFLARE_NEWS_SETUP.md
+  // 1) npx wrangler kv namespace create OSCAR_FEED
+  // 2) Uncomment and paste the namespace id:
+  // "kv_namespaces": [{ "binding": "FEED_KV", "id": "YOUR_KV_NAMESPACE_ID" }]
 }

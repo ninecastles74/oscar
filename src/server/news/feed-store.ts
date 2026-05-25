@@ -4,6 +4,13 @@ import type { AnalyzedArticleBundle } from "../consensus/types";
 import { rankTopClusters } from "./rank";
 import { saveClusterArticles, saveStoryConsensus, getStoryConsensus } from "../consensus/store";
 import type { IngestNewsResult } from "./ingest";
+import {
+  loadFeedStateFromKv,
+  saveFeedStateToKv,
+  slimArticleForPersist,
+  slimClusterForPersist,
+  type PersistedFeedState,
+} from "./feed-persist";
 
 const TOP_N = 100;
 
@@ -45,12 +52,56 @@ const state: FeedState = {
   top100ClusterIds: [],
 };
 
+let hydratePromise: Promise<boolean> | null = null;
+
 function articleKey(article: NewsArticle): string {
   return article.id || article.url;
 }
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+export function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): void {
+  state.articles.clear();
+  state.clusters.clear();
+  state.articleBundles.clear();
+  for (const article of snapshot.articles) {
+    state.articles.set(article.id, article);
+  }
+  for (const cluster of snapshot.clusters) {
+    state.clusters.set(cluster.id, cluster);
+  }
+  state.top100ClusterIds = snapshot.top100ClusterIds;
+  state.lastIngestAt = snapshot.lastIngestAt;
+  state.lastAnalysisAt = snapshot.lastAnalysisAt;
+}
+
+export function exportFeedSnapshot(): PersistedFeedState {
+  return {
+    articles: [...state.articles.values()].map(slimArticleForPersist),
+    clusters: [...state.clusters.values()].map(slimClusterForPersist),
+    top100ClusterIds: state.top100ClusterIds,
+    lastIngestAt: state.lastIngestAt,
+    lastAnalysisAt: state.lastAnalysisAt,
+  };
+}
+
+/** Load Top 100 from KV once per isolate (Workers have no shared RAM between requests). */
+export async function ensureFeedHydratedFromKv(): Promise<boolean> {
+  if (hydratePromise) return hydratePromise;
+  hydratePromise = (async () => {
+    if (state.top100ClusterIds.length > 0) return true;
+    const snapshot = await loadFeedStateFromKv();
+    if (!snapshot || snapshot.top100ClusterIds.length === 0) return false;
+    hydrateFeedFromSnapshot(snapshot);
+    return true;
+  })();
+  return hydratePromise;
+}
+
+async function persistFeedAsync(): Promise<void> {
+  await saveFeedStateToKv(exportFeedSnapshot());
 }
 
 /** Merge ingest batch into durable feed; rank by date/score; cap visible feed at 100. */
@@ -130,6 +181,8 @@ export function mergeIngestIntoFeed(ingest: IngestNewsResult): FeedMergeResult {
   state.top100ClusterIds = nextTop;
   state.lastIngestAt = ts;
 
+  void persistFeedAsync();
+
   return {
     newArticleIds,
     updatedArticleIds,
@@ -186,7 +239,8 @@ export function updateClusterFromConsensus(
   saveStoryConsensus(report);
 }
 
-export function getTop100Clusters(): StoryCluster[] {
+export async function getTop100Clusters(): Promise<StoryCluster[]> {
+  await ensureFeedHydratedFromKv();
   return state.top100ClusterIds
     .map((id) => state.clusters.get(id))
     .filter((c): c is StoredCluster => !!c);
