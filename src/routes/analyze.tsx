@@ -1,8 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AnalyzerFormView } from "@/features/manual-analyzer/analyzer-form-view";
-import { OSCAR, pageTitle } from "@/lib/brand";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
+/** Layout for Ask Oscar — child routes: index (form), results (report). */
 export const Route = createFileRoute("/analyze")({
-  head: () => ({ meta: [{ title: pageTitle(OSCAR.ask) }] }),
-  component: AnalyzerFormView,
+  component: AnalyzeLayout,
 });
+
+function AnalyzeLayout() {
+  return <Outlet />;
+}

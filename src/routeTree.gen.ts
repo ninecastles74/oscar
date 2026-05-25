@@ -19,6 +19,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyzeRouteImport } from './routes/analyze'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AnalyzeIndexRouteImport } from './routes/analyze.index'
 import { Route as StoriesClusterIdRouteImport } from './routes/stories.$clusterId'
 import { Route as ConsensusClusterIdRouteImport } from './routes/consensus.$clusterId'
 import { Route as CompareClusterIdRouteImport } from './routes/compare.$clusterId'
@@ -77,6 +78,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyzeIndexRoute = AnalyzeIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AnalyzeRoute,
+} as any)
 const StoriesClusterIdRoute = StoriesClusterIdRouteImport.update({
   id: '/$clusterId',
   path: '/$clusterId',
@@ -131,11 +137,11 @@ export interface FileRoutesByFullPath {
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/analyze/': typeof AnalyzeIndexRoute
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/analyze': typeof AnalyzeRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/pipeline': typeof PipelineRoute
@@ -150,6 +156,7 @@ export interface FileRoutesByTo {
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/analyze': typeof AnalyzeIndexRoute
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRoutesById {
@@ -170,6 +177,7 @@ export interface FileRoutesById {
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
+  '/analyze/': typeof AnalyzeIndexRoute
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
 }
 export interface FileRouteTypes {
@@ -191,11 +199,11 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/analyze/'
     | '/stories/$clusterId/$articleId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/analyze'
     | '/dashboard'
     | '/login'
     | '/pipeline'
@@ -210,6 +218,7 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/analyze'
     | '/stories/$clusterId/$articleId'
   id:
     | '__root__'
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
+    | '/analyze/'
     | '/stories/$clusterId/$articleId'
   fileRoutesById: FileRoutesById
 }
@@ -321,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analyze/': {
+      id: '/analyze/'
+      path: '/'
+      fullPath: '/analyze/'
+      preLoaderRoute: typeof AnalyzeIndexRouteImport
+      parentRoute: typeof AnalyzeRoute
+    }
     '/stories/$clusterId': {
       id: '/stories/$clusterId'
       path: '/$clusterId'
@@ -375,10 +392,12 @@ declare module '@tanstack/react-router' {
 
 interface AnalyzeRouteChildren {
   AnalyzeResultsRoute: typeof AnalyzeResultsRoute
+  AnalyzeIndexRoute: typeof AnalyzeIndexRoute
 }
 
 const AnalyzeRouteChildren: AnalyzeRouteChildren = {
   AnalyzeResultsRoute: AnalyzeResultsRoute,
+  AnalyzeIndexRoute: AnalyzeIndexRoute,
 }
 
 const AnalyzeRouteWithChildren =

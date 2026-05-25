@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { FileText, Link2, Loader2, Sparkles } from "lucide-react";
 import { submitManualAnalysis } from "@/server/analysis/functions";
 import { getAiUsageQuota } from "@/server/usage/functions";
@@ -33,10 +34,25 @@ export function UserAnalysisForm({
     })();
   }, []);
 
+  const goToResults = async (requestId: string) => {
+    const search = { id: requestId };
+    try {
+      await nav({ to: "/analyze/results", search, replace: true });
+    } catch {
+      /* router navigate failed — hard redirect */
+    }
+    if (typeof window !== "undefined" && !window.location.pathname.endsWith("/analyze/results")) {
+      const qs = new URLSearchParams(search).toString();
+      window.location.assign(`/analyze/results?${qs}`);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    flushSync(() => {
+      setLoading(true);
+      setError(null);
+    });
 
     try {
       const accessToken = await getAccessToken();
@@ -52,21 +68,23 @@ export function UserAnalysisForm({
         if ("quota" in result.error && result.error.quota) {
           setQuota(result.error.quota as QuotaInfo);
         }
-        setLoading(false);
         return;
       }
 
       if (result.quota) setQuota(result.quota);
 
-      if (!result.requestId) {
+      const requestId =
+        result.requestId ??
+        (typeof result === "object" && result !== null && "data" in result
+          ? (result as { data?: { requestId?: string } }).data?.requestId
+          : undefined);
+
+      if (!requestId) {
         setError("No request id returned from server");
         return;
       }
 
-      await nav({
-        to: "/analyze/results",
-        search: { id: result.requestId },
-      });
+      await goToResults(requestId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
