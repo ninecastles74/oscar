@@ -5,9 +5,9 @@ export const OSCAR_LOGO_SRC = "/oscar-logo.png";
 type OscarLogoSize = "header" | "hero" | "auth";
 
 const sizeClass: Record<OscarLogoSize, string> = {
-  header: "h-8 w-auto max-w-[11rem] sm:max-w-[13rem]",
-  hero: "h-16 w-auto max-w-md sm:h-20",
-  auth: "h-14 w-auto max-w-sm",
+  header: "h-9 w-auto max-w-[14rem] sm:max-w-[18rem]",
+  hero: "h-20 w-auto max-w-2xl sm:h-24",
+  auth: "h-16 w-auto max-w-md",
 };
 
 export function OscarLogo({
@@ -24,8 +24,8 @@ export function OscarLogo({
     <img
       src={OSCAR_LOGO_SRC}
       alt="OSCAR — Observational Source Consensus & Analysis Review"
-      width={320}
-      height={80}
+      width={560}
+      height={140}
       decoding="async"
       fetchPriority={priority ? "high" : "auto"}
       className={cn("object-contain object-left", sizeClass[size], className)}
