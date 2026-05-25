@@ -147,12 +147,20 @@ function syncStoryScoresToArticlePages(
   mergeStoryIntoArticlePageScores(story, ids);
 }
 
+function clusterArticlesNeedAiRefresh(articles: NewsArticle[]): boolean {
+  return articles.some((a) => {
+    const key = a.id || stableArticleId(a.url);
+    const bundle = getArticleBundle(key);
+    return !bundle?.report?.multiModelVerification;
+  });
+}
+
 async function ensureFeedConsensusReport(
   cluster: StoryCluster,
   articles: NewsArticle[],
 ): Promise<StoryConsensusReport> {
   const cached = getStoryConsensus(cluster.id);
-  if (cached) {
+  if (cached && !clusterArticlesNeedAiRefresh(articles)) {
     syncStoryScoresToArticlePages(articles, cached);
     return cached;
   }
