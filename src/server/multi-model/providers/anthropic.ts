@@ -1,20 +1,21 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
+import { getServerEnv } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
 import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
 
-const LLM_TIMEOUT_MS = Number(process.env.LLM_FETCH_TIMEOUT_MS) || 12_000;
+const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 12_000;
 
 const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
 
 export async function verifyClaimWithAnthropic(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = getServerEnv("ANTHROPIC_API_KEY");
   if (!apiKey) return null;
 
-  const model = process.env.ANTHROPIC_VERIFICATION_MODEL ?? "claude-3-5-haiku-20241022";
+  const model = getServerEnv("ANTHROPIC_VERIFICATION_MODEL") ?? "claude-3-5-haiku-20241022";
   const { system, user } = buildVerificationPrompt({
     ...input,
     evidenceSummary: formatEvidenceSummary(input.evidence),

@@ -4,12 +4,13 @@ import {
   getGoogleAiApiKey,
   isGeminiGoogleSearchEnabled,
 } from "../../ai/google-api-key";
+import { getServerEnv } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
 import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
 
-const LLM_TIMEOUT_MS = Number(process.env.GEMINI_FETCH_TIMEOUT_MS) || 25_000;
+const LLM_TIMEOUT_MS = Number(getServerEnv("GEMINI_FETCH_TIMEOUT_MS")) || 25_000;
 
 const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
 

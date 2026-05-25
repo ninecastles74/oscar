@@ -1,20 +1,24 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
+import { getServerEnv } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
 import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
 
-const LLM_TIMEOUT_MS = Number(process.env.LLM_FETCH_TIMEOUT_MS) || 12_000;
+const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 12_000;
 
 const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
 
 export async function verifyClaimWithOpenAI(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = getServerEnv("OPENAI_API_KEY");
   if (!apiKey) return null;
 
-  const model = process.env.OPENAI_VERIFICATION_MODEL ?? process.env.OPENAI_TOPIC_MODEL ?? "gpt-4o-mini";
+  const model =
+    getServerEnv("OPENAI_VERIFICATION_MODEL") ??
+    getServerEnv("OPENAI_TOPIC_MODEL") ??
+    "gpt-4o-mini";
   const { system, user } = buildVerificationPrompt({
     ...input,
     evidenceSummary: formatEvidenceSummary(input.evidence),

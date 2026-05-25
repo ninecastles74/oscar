@@ -1,3 +1,5 @@
+import { mirrorWorkerEnvToProcessEnv } from "../env/server-env";
+
 /** Minimal KV types (Cloudflare binding). */
 export interface FeedKvNamespace {
   get(key: string, type: "json"): Promise<unknown>;
@@ -6,9 +8,10 @@ export interface FeedKvNamespace {
   delete(key: string): Promise<void>;
 }
 
-/** Cloudflare Worker bindings (KV, etc.) — set from src/server.ts on each invocation. */
+/** Cloudflare Worker bindings (KV, secrets, etc.) — set from src/server.ts on each invocation. */
 export interface OscarWorkerBindings {
   FEED_KV?: FeedKvNamespace;
+  [key: string]: unknown;
 }
 
 let bindings: OscarWorkerBindings | null = null;
@@ -17,6 +20,7 @@ let backgroundWaitUntil: ((promise: Promise<unknown>) => void) | null = null;
 export function setWorkerBindings(env: unknown): void {
   if (env && typeof env === "object") {
     bindings = env as OscarWorkerBindings;
+    mirrorWorkerEnvToProcessEnv(env as Record<string, unknown>);
     return;
   }
   bindings = null;

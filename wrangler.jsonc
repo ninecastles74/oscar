@@ -2,7 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "oscar",
   "compatibility_date": "2025-09-24",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat_populate_process_env","nodejs_compat"],
   "main": "src/server.ts",
   // Free Workers: max 5 cron triggers per *account* (not per Worker). Keep ≤4 here
   // if you use crons on other Workers. Daily reliability jobs share one schedule.

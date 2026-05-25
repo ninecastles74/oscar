@@ -1,5 +1,6 @@
 import type { ModelProviderId, Verdict } from "@/types/news-platform";
 import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
+import { getServerEnv, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
 
 export const MODEL_WEIGHTS = {
   primary: 0.45,
@@ -15,22 +16,22 @@ export const REVIEW_VERDICTS: Verdict[] = ["disputed", "unclear", "insufficient_
 export const DISAGREEMENT_CONFIDENCE_SPREAD = 22;
 
 export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): boolean {
-  if (forTrigger === "scheduled" && process.env.SCHEDULED_USE_MULTI_MODEL === "false") {
+  if (forTrigger === "scheduled" && isServerEnvFalse("SCHEDULED_USE_MULTI_MODEL")) {
     return false;
   }
-  if (process.env.MULTI_MODEL_VERIFICATION_ENABLED === "false") return false;
+  if (isServerEnvFalse("MULTI_MODEL_VERIFICATION_ENABLED")) return false;
   return (
-    !!process.env.OPENAI_API_KEY?.trim() ||
-    !!process.env.ANTHROPIC_API_KEY?.trim() ||
+    isServerEnvTruthy("OPENAI_API_KEY") ||
+    isServerEnvTruthy("ANTHROPIC_API_KEY") ||
     isGoogleAiConfigured() ||
-    process.env.MULTI_MODEL_VERIFICATION_ENABLED === "true"
+    getServerEnv("MULTI_MODEL_VERIFICATION_ENABLED") === "true"
   );
 }
 
 export function availableProviders(): ModelProviderId[] {
   const out: ModelProviderId[] = [];
-  if (process.env.OPENAI_API_KEY?.trim()) out.push("openai");
-  if (process.env.ANTHROPIC_API_KEY?.trim()) out.push("anthropic");
+  if (isServerEnvTruthy("OPENAI_API_KEY")) out.push("openai");
+  if (isServerEnvTruthy("ANTHROPIC_API_KEY")) out.push("anthropic");
   if (isGoogleAiConfigured()) out.push("google");
   return out;
 }

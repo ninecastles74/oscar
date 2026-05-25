@@ -10,6 +10,7 @@ import {
 import { runInWorkerBackground } from "../news/worker-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
+import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
 import {
   assertAiAnalysisQuota,
   getQuotaStatus,
@@ -147,3 +148,8 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
       request: status,
     };
   });
+
+/** Server AI wiring diagnostics (no secrets). */
+export const getAiDiagnostics = createServerFn({ method: "GET" }).handler(async () => {
+  return getAiAnalysisDiagnostics();
+});

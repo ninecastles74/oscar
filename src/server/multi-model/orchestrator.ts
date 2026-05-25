@@ -1,3 +1,4 @@
+import { isServerEnvTruthy } from "../env/server-env";
 import type {
   AnalysisReport,
   EvidenceItem,
@@ -51,7 +52,7 @@ async function verifyOneClaim(
   };
 
   let primary: ModelClaimVerdict | null = null;
-  if (process.env.OPENAI_API_KEY?.trim()) {
+  if (isServerEnvTruthy("OPENAI_API_KEY")) {
     stages.push("openai_primary");
     primary = await verifyClaimWithOpenAI({
       claimId: claim.id,
@@ -73,7 +74,7 @@ async function verifyOneClaim(
   let review: ModelClaimVerdict | null = null;
   const runReview = needsClaudeReview(primary, pipelineFallback);
   if (runReview) {
-    if (process.env.ANTHROPIC_API_KEY?.trim()) {
+    if (isServerEnvTruthy("ANTHROPIC_API_KEY")) {
       stages.push("claude_review");
       review = await verifyClaimWithAnthropic({
         claimId: claim.id,
