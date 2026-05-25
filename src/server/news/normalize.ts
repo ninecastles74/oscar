@@ -3,6 +3,8 @@ import { normalizeImageUrl } from "@/lib/article-image";
 import { canonicalizeUrl, extractDomain } from "./utils/url";
 import { contentHash, stableArticleId } from "./utils/text";
 import type { RawArticle } from "./providers/types";
+import { inferArticleCategory } from "./category-inference";
+import { resolvePublisher } from "./resolve-publisher";
 
 const CATEGORY_MAP: Record<string, Category> = {
   politics: "Politics",
@@ -52,7 +54,12 @@ export async function normalizeArticle(raw: RawArticle): Promise<NewsArticle | n
   if (!title || !url) return null;
 
   const canonical = canonicalizeUrl(url);
-  const domain = extractDomain(raw.sourceDomain || url);
+  const publisher = resolvePublisher({
+    sourceId: raw.sourceId,
+    sourceDomain: raw.sourceDomain,
+    sourceName: raw.sourceName,
+    url: canonical,
+  });
   const description = (raw.description || title).trim().slice(0, 2000);
   const publishedAt = raw.publishedAt || new Date().toISOString();
   const hash = await contentHash(title, description, canonical);
@@ -86,14 +93,14 @@ export async function normalizeArticle(raw: RawArticle): Promise<NewsArticle | n
     headline: title,
     description,
     url: canonical,
-    sourceName: raw.sourceName || domain,
-    sourceDomain: domain,
-    sourceId: raw.sourceId,
+    sourceName: publisher.sourceName,
+    sourceDomain: publisher.sourceDomain,
+    sourceId: publisher.sourceId,
     author: raw.author,
     publishedAt,
     imageUrl: normalizeImageUrl(raw.imageUrl),
     originalApiProvider: raw.provider,
-    category: coerceCategory(String(raw.category)),
+    category: inferArticleCategory(title, description, String(raw.category)),
     country: raw.country,
     language: raw.language || "en",
     fullText,

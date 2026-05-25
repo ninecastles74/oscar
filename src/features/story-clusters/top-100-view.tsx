@@ -6,7 +6,19 @@ import { ArticleThumbnail } from "@/components/article-thumbnail";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { OSCAR } from "@/lib/brand";
 
-const CATS = ["All", "Politics", "World", "Business", "Technology", "Science", "Health", "Climate", "Markets"];
+const CATS = [
+  "All",
+  "Politics",
+  "World",
+  "Business",
+  "Technology",
+  "Science",
+  "Health",
+  "Sports",
+  "Climate",
+  "Markets",
+  "Entertainment",
+];
 
 type FeedDiagnostics = {
   feedKvBound?: boolean;
@@ -109,10 +121,11 @@ export function Top100View({
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-card">
-        <div className="grid grid-cols-[40px_72px_1fr_140px_160px_120px] gap-4 border-b bg-secondary/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-[40px_72px_1fr_160px_120px_160px_120px] gap-4 border-b bg-secondary/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <div>#</div>
           <div aria-hidden />
           <div>Story</div>
+          <div>Outlet</div>
           <div>Category</div>
           <div>Confidence</div>
           <div>Flags</div>
@@ -123,16 +136,26 @@ export function Top100View({
               key={c.id}
               to="/consensus/$clusterId"
               params={{ clusterId: c.id }}
-              className="grid grid-cols-[40px_72px_1fr_140px_160px_120px] items-center gap-4 px-4 py-4 transition-colors hover:bg-secondary/40"
+              className="grid grid-cols-[40px_72px_1fr_160px_120px_160px_120px] items-center gap-4 px-4 py-4 transition-colors hover:bg-secondary/40"
             >
               <span className="font-mono text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
               <ArticleThumbnail src={c.imageUrl} alt="" className="h-14 w-[72px] rounded-md object-cover" />
               <div>
                 <div className="text-sm font-semibold leading-snug">{c.title}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {c.storyCount} sources · updated{" "}
+                  {c.storyCount > 1
+                    ? `${c.storyCount} sources`
+                    : c.primarySourceName
+                      ? "1 source"
+                      : "1 source"}{" "}
+                  · updated{" "}
                   {new Date(c.publishedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </div>
+              </div>
+              <div className="text-xs font-medium leading-snug">
+                {c.storyCount > 1 && c.sourceNames && c.sourceNames.length > 1
+                  ? `${c.primarySourceName ?? c.sourceNames[0]} +${c.sourceNames.length - 1}`
+                  : c.primarySourceName ?? c.sourceNames?.[0] ?? "—"}
               </div>
               <div className="text-xs">{c.category}</div>
               <div><ConfidenceBar value={c.confidence} label="" /></div>

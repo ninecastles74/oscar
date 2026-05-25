@@ -2,6 +2,8 @@ import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/ne
 import { pickClusterImageUrl } from "@/lib/article-image";
 import type { AnalyzedArticleBundle } from "../consensus/types";
 import { rankTopClusters } from "./rank";
+import { enrichClusterFromMembers } from "./cluster";
+import { inferArticleCategory } from "./category-inference";
 import { saveClusterArticles, saveStoryConsensus, getStoryConsensus } from "../consensus/store";
 import type { IngestNewsResult } from "./ingest";
 import {
@@ -62,6 +64,26 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function refreshStoredArticleCategories(): void {
+  for (const [id, article] of state.articles) {
+    const category = inferArticleCategory(article.title, article.description, article.category);
+    if (category !== article.category) {
+      state.articles.set(id, { ...article, category });
+    }
+  }
+}
+
+function refreshClusterDisplayFields(): void {
+  for (const [clusterId, cluster] of state.clusters) {
+    const members = [...state.articles.values()].filter((a) => a.clusterId === clusterId);
+    state.clusters.set(clusterId, enrichClusterFromMembers(cluster, members));
+  }
+}
+
+export function listAllStoredArticles(): NewsArticle[] {
+  return [...state.articles.values()];
+}
+
 export function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): void {
   state.articles.clear();
   state.clusters.clear();
@@ -75,6 +97,8 @@ export function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): void {
   state.top100ClusterIds = snapshot.top100ClusterIds;
   state.lastIngestAt = snapshot.lastIngestAt;
   state.lastAnalysisAt = snapshot.lastAnalysisAt;
+  refreshStoredArticleCategories();
+  refreshClusterDisplayFields();
 }
 
 export function exportFeedSnapshot(): PersistedFeedState {
@@ -242,8 +266,13 @@ export function updateClusterFromConsensus(
 export async function getTop100Clusters(): Promise<StoryCluster[]> {
   await ensureFeedHydratedFromKv();
   return state.top100ClusterIds
-    .map((id) => state.clusters.get(id))
-    .filter((c): c is StoredCluster => !!c);
+    .map((id) => {
+      const cluster = state.clusters.get(id);
+      if (!cluster) return undefined;
+      const members = getClusterArticlesFromStore(id);
+      return enrichClusterFromMembers(cluster, members);
+    })
+    .filter((c): c is StoryCluster => !!c);
 }
 
 export function getFeedMeta() {

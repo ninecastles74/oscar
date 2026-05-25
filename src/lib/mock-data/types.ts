@@ -59,4 +59,6 @@ export interface Cluster {
   claimIds: string[];
   trendingScore: number;
   imageUrl?: string;
+  primarySourceName?: string;
+  sourceNames?: string[];
 }

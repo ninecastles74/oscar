@@ -1,6 +1,7 @@
 import type { Category } from "@/types/news-platform";
 import type { ArticleImageSource } from "@/types/news-platform";
 import { coerceCategory } from "../normalize";
+import { inferArticleCategory } from "../category-inference";
 import { isLikelyFullArticleBody, sanitizeRssSummary, stripHtml } from "./content-policy";
 import type { RssFeedRegistryEntry } from "./registry";
 
@@ -30,14 +31,19 @@ function attrUrl(block: string, patterns: RegExp[]): string | undefined {
   return undefined;
 }
 
-function parseCategories(block: string, fallback: Category): Category {
+function parseCategories(
+  block: string,
+  fallback: Category,
+  title: string,
+  description: string,
+): Category {
   const tags = block.match(/<category[^>]*>([\s\S]*?)<\/category>/gi) ?? [];
   for (const tag of tags) {
     const inner = tag.replace(/<\/?category[^>]*>/gi, "").trim();
     const label = stripHtml(inner);
-    if (label) return coerceCategory(label);
+    if (label) return inferArticleCategory(title, description, coerceCategory(label));
   }
-  return fallback;
+  return inferArticleCategory(title, description, fallback);
 }
 
 function parseImage(
@@ -89,7 +95,7 @@ function parseRss2Items(xml: string, feed: RssFeedRegistryEntry): ParsedRssItem[
     const pubDate = tagContent(block, "pubDate") ?? tagContent(block, "dc:date");
     const author = tagContent(block, "dc:creator") ?? tagContent(block, "author") ?? undefined;
     const { url: imageUrl, source: imageSource } = parseImage(block, feed.includeImage);
-    const category = parseCategories(block, feed.category);
+    const category = parseCategories(block, feed.category, title, summary);
     const externalId = tagContent(block, "guid") ?? link;
 
     items.push({
@@ -122,7 +128,7 @@ function parseAtomItems(xml: string, feed: RssFeedRegistryEntry): ParsedRssItem[
     const updated = tagContent(block, "updated") ?? tagContent(block, "published");
     const author = tagContent(block, "author") ?? tagContent(block, "name") ?? undefined;
     const { url: imageUrl, source: imageSource } = parseImage(block, feed.includeImage);
-    const category = parseCategories(block, feed.category);
+    const category = parseCategories(block, feed.category, title, summary);
 
     items.push({
       title,

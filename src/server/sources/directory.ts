@@ -15,6 +15,8 @@ import {
 } from "../reliability/store";
 import { organizationIdFromDomain } from "../reliability/utils/entity-ids";
 import { getSupabaseAdmin } from "../supabase/client";
+import { ensureFeedHydratedFromKv, listAllStoredArticles } from "../news/feed-store";
+import { mergeFeedIntoSourcesDirectory } from "./feed-sources";
 
 export type {
   AuthorDirectoryRow,
@@ -347,10 +349,9 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
 
   const db = await loadSupabaseScoreMaps();
   const supabaseMerged = Boolean(db);
-  const useMockAuthors = !hasRealImportedAuthors(db);
 
   let authors: AuthorDirectoryRow[];
-  if (useMockAuthors) {
+  if (!hasRealImportedAuthors(db)) {
     authors = AUTHORS.map((a) => rowFromAuthorMock(a));
   } else if (db) {
     authors = buildRealAuthorRows(db);
@@ -370,6 +371,18 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
 
   authors = authors.sort((a, b) => b.averageScore - a.averageScore);
 
+  await ensureFeedHydratedFromKv();
+  const feedArticles = listAllStoredArticles();
+  const feedMerged = mergeFeedIntoSourcesDirectory(organizations, authors, feedArticles);
+  organizations = feedMerged.organizations;
+  authors = feedMerged.authors;
+
+  const useMockAuthors =
+    !hasRealImportedAuthors(db) && feedMerged.feedAuthorCount === 0;
+  if (useMockAuthors) {
+    authors = AUTHORS.map((a) => rowFromAuthorMock(a)).sort((a, b) => b.averageScore - a.averageScore);
+  }
+
   const computedOrganizationCount = organizations.filter((o) => o.scoreSource !== "registry").length;
   const computedAuthorCount = authors.filter((a) => a.scoreSource !== "registry").length;
 
@@ -383,6 +396,9 @@ async function buildSourcesDirectoryInner(): Promise<SourcesDirectory> {
       computedAuthorCount,
       supabaseMerged,
       usingMockAuthors: useMockAuthors,
+      feedOrganizationsAdded: feedMerged.feedOrgCount,
+      feedAuthorsAdded: feedMerged.feedAuthorCount,
+      feedArticlesSeen: feedArticles.length,
     },
   };
 }

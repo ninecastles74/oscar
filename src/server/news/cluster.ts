@@ -3,6 +3,7 @@ import { pickClusterImageUrl } from "@/lib/article-image";
 import { titleSimilarity } from "./utils/text";
 import { reliabilityForDomain } from "./source-registry";
 import { extractDomain } from "./utils/url";
+import { dominantCategoryFromArticles } from "./category-inference";
 
 export interface ClusterStats {
   clusterCount: number;
@@ -33,20 +34,30 @@ function hoursBetween(a: string, b: string): number {
   return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 3_600_000;
 }
 
-function dominantCategory(articles: NewsArticle[]): Category {
-  const counts = new Map<Category, number>();
-  for (const a of articles) {
-    counts.set(a.category, (counts.get(a.category) ?? 0) + 1);
+export function enrichClusterFromMembers(cluster: StoryCluster, members: NewsArticle[]): StoryCluster {
+  const { primarySourceName, sourceNames } = uniqueSourceLabels(members);
+  return {
+    ...cluster,
+    category: members.length ? dominantCategoryFromArticles(members) : cluster.category,
+    primarySourceName: primarySourceName || cluster.primarySourceName,
+    sourceNames: sourceNames.length ? sourceNames : cluster.sourceNames,
+    storyCount: members.length || cluster.storyCount,
+  };
+}
+
+function uniqueSourceLabels(members: NewsArticle[]): { primarySourceName: string; sourceNames: string[] } {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const m of members) {
+    const label = m.sourceName?.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    names.push(label);
   }
-  let best: Category = "General";
-  let max = 0;
-  for (const [cat, n] of counts) {
-    if (n > max) {
-      max = n;
-      best = cat;
-    }
-  }
-  return best;
+  return {
+    primarySourceName: names[0] ?? members[0]?.sourceName ?? "Unknown",
+    sourceNames: names,
+  };
 }
 
 function buildSummary(articles: NewsArticle[]): string {
@@ -117,12 +128,15 @@ export function clusterArticles(articles: NewsArticle[]): {
     }
 
     const sourceDiversity = domains.size / Math.max(1, members.length);
+    const { primarySourceName, sourceNames } = uniqueSourceLabels(members);
 
     clusters.push({
       id: clusterId,
       title: lead.title,
       summary: buildSummary(members),
-      category: dominantCategory(members),
+      category: dominantCategoryFromArticles(members),
+      primarySourceName,
+      sourceNames,
       storyCount: members.length,
       confidence: Math.min(
         95,

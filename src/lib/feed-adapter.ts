@@ -18,6 +18,8 @@ export function storyClusterToUiCluster(c: StoryCluster, index: number): Cluster
     storyIds: c.articleIds ?? c.storyIds ?? [],
     claimIds: c.claimIds ?? [],
     trendingScore: c.trendingScore ?? 100 - index,
+    primarySourceName: c.primarySourceName,
+    sourceNames: c.sourceNames,
   };
 }
 

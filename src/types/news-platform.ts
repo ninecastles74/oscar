@@ -299,6 +299,12 @@ export interface StoryCluster {
   /** Trending / relevance score for ranking. */
   trendingScore: number;
 
+  /** Lead outlet name (canonical publisher). */
+  primarySourceName?: string;
+
+  /** Unique outlet names in this cluster. */
+  sourceNames?: string[];
+
   /** Source diversity metric (unique domains / total articles). */
   sourceDiversity?: number;
 

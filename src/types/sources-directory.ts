@@ -35,5 +35,8 @@ export interface SourcesDirectory {
     computedAuthorCount: number;
     supabaseMerged: boolean;
     usingMockAuthors: boolean;
+    feedOrganizationsAdded?: number;
+    feedAuthorsAdded?: number;
+    feedArticlesSeen?: number;
   };
 }
