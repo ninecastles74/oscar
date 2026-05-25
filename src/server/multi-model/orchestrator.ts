@@ -137,18 +137,45 @@ export async function arbitrateSingleClaim(
  * Multi-model claim verification workflow:
  * 1. OpenAI primary → 2. Claude review (disputed/uncertain) → 3. Gemini corroboration → 4. Consensus
  */
+const MANUAL_MAX_CLAIMS = Number(process.env.MANUAL_MULTIMODEL_MAX_CLAIMS) || 5;
+const MANUAL_CONCURRENCY = Number(process.env.MANUAL_MULTIMODEL_CONCURRENCY) || 3;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (index < items.length) {
+      const i = index++;
+      results[i] = await fn(items[i]!);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
+}
+
 export async function runMultiModelVerification(
   results: VerificationPipelineResults,
+  options?: { trigger?: "user" | "scheduled" },
 ): Promise<MultiModelVerificationReport> {
-  const claims = results.scoredClaims;
-  const verifications: import("@/types/news-platform").MultiModelClaimVerification[] = [];
+  let claims = results.scoredClaims;
+  if (options?.trigger === "user" && claims.length > MANUAL_MAX_CLAIMS) {
+    claims = claims.slice(0, MANUAL_MAX_CLAIMS);
+  }
 
-  for (const claim of claims) {
+  const verifications = await mapWithConcurrency(claims, MANUAL_CONCURRENCY, async (claim) => {
     const evidence = results.evidenceByClaimId[claim.id] ?? claim.evidence ?? [];
     const contradiction = results.contradictionAnalyses?.[claim.id];
     const { verification } = await verifyOneClaim(claim, evidence, contradiction);
-    verifications.push(verification);
-  }
+    return verification;
+  });
 
   const disagreementCount = verifications.filter(
     (v) => v.consensus.disagreementDetected,
@@ -221,7 +248,7 @@ export async function enrichVerificationWithMultiModel(
 ): Promise<import("../analysis/verification/types").VerificationReportBundle> {
   if (!isMultiModelEnabled(trigger)) return bundle;
 
-  const multiModel = await runMultiModelVerification(bundle.results);
+  const multiModel = await runMultiModelVerification(bundle.results, { trigger });
   const report = applyMultiModelToReport(bundle.report, multiModel);
   return {
     ...bundle,

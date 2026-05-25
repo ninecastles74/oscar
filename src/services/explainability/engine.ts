@@ -1,4 +1,4 @@
-import { getManualAnalysisResult } from "@/server/analysis/manual";
+import { getRequest } from "@/server/analysis/store";
 import type { VerificationPipelineResults } from "@/server/analysis/verification/types";
 import type { AnalysisReport, ReliabilityScoreBundle } from "@/types/news-platform";
 import { getReliabilityBundleByArticleId } from "@/server/reliability/engine";
@@ -26,13 +26,18 @@ function resolveAnalysisContext(
   articleId?: string,
 ): ResolvedAnalysisContext | null {
   if (requestId) {
-    const manual = getManualAnalysisResult(requestId);
-    if (manual) {
-      return {
-        report: manual.report,
-        bundle: manual.reliability,
-        results: getVerificationSnapshot(requestId)?.results,
-      };
+    const request = getRequest(requestId);
+    if (request?.status === "completed" && request.report) {
+      const bundle =
+        getReliabilityBundleByArticleId(request.submission?.id ?? requestId) ??
+        getReliabilityBundleByArticleId(requestId);
+      if (bundle) {
+        return {
+          report: request.report,
+          bundle,
+          results: getVerificationSnapshot(requestId)?.results,
+        };
+      }
     }
     const snap = getVerificationSnapshot(requestId);
     if (snap) {

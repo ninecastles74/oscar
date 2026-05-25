@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { setWorkerBindings } from "./server/news/worker-env";
+import { setWorkerBindings, setWorkerExecutionContext } from "./server/news/worker-env";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -73,6 +73,7 @@ type ScheduledController = { cron: string; scheduledTime: number };
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     setWorkerBindings(env);
+    setWorkerExecutionContext(ctx);
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

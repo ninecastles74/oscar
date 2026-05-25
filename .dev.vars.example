@@ -17,6 +17,12 @@ SCHEDULED_NEWS_ENABLED=true
 # GNEWS_API_KEY=
 # GUARDIAN_API_KEY=
 
+# --- Ask Oscar manual analysis ---
+# Returns immediately; analysis runs in the background (Workers waitUntil).
+# FINAL_INTELLIGENCE_ON_MANUAL=true  # optional; adds ~30s+ per run
+# MANUAL_MULTIMODEL_MAX_CLAIMS=5
+# LLM_FETCH_TIMEOUT_MS=12000
+
 # --- Supabase (analysis persistence; not required for Top 100 feed) ---
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=

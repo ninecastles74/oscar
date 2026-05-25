@@ -60,7 +60,6 @@ export function UserAnalysisForm({
 
       if (!result.requestId) {
         setError("No request id returned from server");
-        setLoading(false);
         return;
       }
 
@@ -70,6 +69,7 @@ export function UserAnalysisForm({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
       setLoading(false);
     }
   };

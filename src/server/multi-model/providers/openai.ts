@@ -1,7 +1,10 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
 import { clampScore } from "../../reliability/utils/math";
+import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
 import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
+
+const LLM_TIMEOUT_MS = Number(process.env.LLM_FETCH_TIMEOUT_MS) || 12_000;
 
 const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
 
@@ -18,22 +21,26 @@ export async function verifyClaimWithOpenAI(
   });
 
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+    const res = await fetchWithTimeout(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: input.role === "corroboration" ? 0.05 : 0.15,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        model,
-        temperature: input.role === "corroboration" ? 0.05 : 0.15,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    });
+      LLM_TIMEOUT_MS,
+    );
 
     if (!res.ok) return null;
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };

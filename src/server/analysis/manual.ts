@@ -11,16 +11,17 @@ import {
 import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
 import { buildFinalIntelligenceReport } from "../orchestration/build-final-intelligence";
 import type { ArticleOrchestrationReport } from "../orchestration/types";
-import {
-  getRequest,
-  getSubmission,
-  saveRequest,
-  saveSubmission,
-  updateRequest,
-  updateSubmission,
-} from "./store";
 import type { ManualAnalysisResponse, ParsedArticleInput, PipelineArticleContext } from "./types";
 import { fetchArticleFromUrl } from "./url-fetch";
+import {
+  loadManualRequest,
+  loadManualSubmission,
+  persistManualRequest,
+  persistManualSubmission,
+  syncManualRequest,
+  syncManualSubmission,
+} from "./manual-persist";
+
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -49,7 +50,7 @@ function parsedFromText(text: string, opts: { url?: string; title?: string }): P
   };
 }
 
-export async function runManualAnalysis(input: {
+export interface BeginManualAnalysisInput {
   url?: string;
   text?: string;
   title?: string;
@@ -57,9 +58,13 @@ export async function runManualAnalysis(input: {
   language?: string;
   userId?: string;
   analysisTrigger?: AnalysisTrigger;
-}): Promise<ManualAnalysisResponse> {
-  const trigger = input.analysisTrigger ?? "user";
+}
 
+/** Create a processing request (persisted to KV when configured). */
+export function beginManualAnalysis(input: BeginManualAnalysisInput): {
+  requestId: string;
+  submissionId: string;
+} {
   const hasUrl = !!input.url?.trim();
   const hasText = !!input.text?.trim();
 
@@ -88,16 +93,43 @@ export async function runManualAnalysis(input: {
     type: hasUrl ? "manual_url" : "manual_text",
     submission,
     status: "processing",
-    progress: 10,
+    progress: 5,
     createdAt: submittedAt,
     startedAt: submittedAt,
   };
 
-  saveSubmission(submission);
-  saveRequest(request);
+  persistManualSubmission(submission);
+  persistManualRequest(request);
+
+  return { requestId, submissionId };
+}
+
+/** Run the full pipeline for an existing manual request (background-safe). */
+export async function executeManualAnalysis(requestId: string): Promise<void> {
+  const request = await loadManualRequest(requestId);
+  if (!request?.submission) return;
+
+  const submission =
+    (await loadManualSubmission(request.submission.id)) ?? request.submission;
+  const input: BeginManualAnalysisInput = {
+    url: submission.url,
+    text: submission.text,
+    title: submission.title,
+    language: submission.language,
+    userNotes: submission.userNotes,
+    userId: request.userId,
+    analysisTrigger: "user",
+  };
+
+  const hasUrl = !!input.url?.trim();
+  const hasText = !!input.text?.trim();
+  const submissionId = submission.id;
 
   try {
     let parsed: ParsedArticleInput;
+    request.progress = 15;
+    syncManualRequest(request);
+
     if (hasUrl) {
       parsed = await fetchArticleFromUrl(input.url!.trim());
       if (input.title) parsed.title = input.title;
@@ -118,11 +150,11 @@ export async function runManualAnalysis(input: {
       language: input.language ?? parsed.language,
     };
 
-    request.progress = 40;
-    updateRequest(request);
+    request.progress = 35;
+    syncManualRequest(request);
 
     let bundle = runVerificationPipeline(pipelineArticle);
-    bundle = await enrichVerificationWithMultiModel(bundle, trigger);
+    bundle = await enrichVerificationWithMultiModel(bundle, "user");
     const { report, results } = bundle;
 
     const reliability = computeAndStoreReliabilityScores({
@@ -144,11 +176,10 @@ export async function runManualAnalysis(input: {
     request.completedAt = new Date().toISOString();
     request.report = reportWithConsensus;
 
-    updateSubmission(submission);
-    updateRequest(request);
+    syncManualSubmission(submission);
+    syncManualRequest(request);
 
-    let finalIntelligence: ManualAnalysisResponse["finalIntelligence"];
-    if (process.env.FINAL_INTELLIGENCE_ON_MANUAL !== "false") {
+    if (process.env.FINAL_INTELLIGENCE_ON_MANUAL === "true") {
       const articleResult: ArticleOrchestrationReport = {
         articleId: requestId,
         report: reportWithConsensus,
@@ -171,13 +202,13 @@ export async function runManualAnalysis(input: {
       try {
         const full = await buildFinalIntelligenceReport({
           article: pipelineArticle,
-          trigger,
+          trigger: "user",
           reportId: requestId,
           authorDisplayName: parsed.author,
           articleResult,
           skipMultiModel: true,
         });
-        finalIntelligence = {
+        request.finalIntelligence = {
           finalArticleReliability: full.finalArticleReliability,
           finalSourceReliability: full.finalSourceReliability,
           finalAuthorReliability: full.finalAuthorReliability,
@@ -187,14 +218,11 @@ export async function runManualAnalysis(input: {
           intelligenceSummary: full.intelligenceSummary,
           computedAt: full.computedAt,
         };
-        request.finalIntelligence = finalIntelligence;
-        updateRequest(request);
+        syncManualRequest(request);
       } catch {
-        /* final intelligence is best-effort */
+        /* best-effort */
       }
     }
-
-    return { request, submission, report: reportWithConsensus, reliability, finalIntelligence };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Analysis failed";
     submission.status = "failed";
@@ -202,32 +230,52 @@ export async function runManualAnalysis(input: {
     request.status = "failed";
     request.error = message;
     request.completedAt = new Date().toISOString();
-    updateSubmission(submission);
-    updateRequest(request);
-    throw err;
+    syncManualSubmission(submission);
+    syncManualRequest(request);
+    console.error("[executeManualAnalysis]", message);
   }
 }
 
-export function getManualAnalysisResult(requestId: string): ManualAnalysisResponse | null {
-  const request = getRequest(requestId);
+/** Synchronous path (local/tests) — begin + execute in one call. */
+export async function runManualAnalysis(
+  input: BeginManualAnalysisInput,
+): Promise<ManualAnalysisResponse> {
+  const { requestId } = beginManualAnalysis(input);
+  await executeManualAnalysis(requestId);
+  const result = await getManualAnalysisResult(requestId);
+  if (!result) {
+    const request = await loadManualRequest(requestId);
+    if (request?.status === "failed") {
+      throw new AnalysisError("ANALYSIS_FAILED", request.error ?? "Analysis failed");
+    }
+    throw new AnalysisError("ANALYSIS_FAILED", "Analysis did not complete");
+  }
+  return result;
+}
+
+export async function getManualAnalysisResult(
+  requestId: string,
+): Promise<ManualAnalysisResponse | null> {
+  const request = await loadManualRequest(requestId);
   if (!request?.submission) return null;
-  const submission = getSubmission(request.submission.id) ?? request.submission;
+  const submission = (await loadManualSubmission(request.submission.id)) ?? request.submission;
   if (request.status !== "completed" || !request.report) return null;
   const reliability =
     getReliabilityBundleByArticleId(submission.id) ??
     getReliabilityBundleByArticleId(requestId);
   if (!reliability) return null;
 
-  const stored = getRequest(requestId);
   return {
     request,
     submission,
     report: request.report,
     reliability,
-    finalIntelligence: stored?.finalIntelligence,
+    finalIntelligence: request.finalIntelligence,
   };
 }
 
-export function getManualAnalysisStatus(requestId: string): UserAnalysisRequest | null {
-  return getRequest(requestId) ?? null;
+export async function getManualAnalysisStatus(
+  requestId: string,
+): Promise<UserAnalysisRequest | null> {
+  return (await loadManualRequest(requestId)) ?? null;
 }

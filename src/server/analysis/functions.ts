@@ -1,7 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { AnalysisError } from "./errors";
-import { getManualAnalysisResult, getManualAnalysisStatus, runManualAnalysis } from "./manual";
+import {
+  beginManualAnalysis,
+  executeManualAnalysis,
+  getManualAnalysisResult,
+  getManualAnalysisStatus,
+} from "./manual";
+import { runInWorkerBackground } from "../news/worker-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import {
@@ -50,7 +56,7 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     };
   }
 
-  const result = await runManualAnalysis({
+  const { requestId, submissionId } = beginManualAnalysis({
     url: "url" in data ? data.url : undefined,
     text: data.text,
     title: data.title,
@@ -63,19 +69,24 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
   await recordAiAnalysisUsage({
     actor,
     kind,
-    requestId: result.request.id,
+    requestId,
   });
+
+  runInWorkerBackground(
+    executeManualAnalysis(requestId).catch((err) => {
+      console.error(
+        "[submitManualAnalysis] background failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }),
+  );
 
   const quota = await getQuotaStatus(actor);
 
   return {
-    requestId: result.request.id,
-    submissionId: result.submission.id,
-    status: result.request.status,
-    report: result.report,
-    submission: result.submission,
-    reliability: result.reliability,
-    finalIntelligence: result.finalIntelligence,
+    requestId,
+    submissionId,
+    status: "processing" as const,
     quota,
   };
 }
@@ -104,7 +115,7 @@ export const submitManualAnalysis = createServerFn({ method: "POST" })
 export const getManualAnalysis = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => idSchema.parse(data))
   .handler(async ({ data }) => {
-    const result = getManualAnalysisResult(data.requestId);
+    const result = await getManualAnalysisResult(data.requestId);
     if (result) {
       const explainability = buildFullExplainabilityBundle(
         result.report,
@@ -123,7 +134,7 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
       };
     }
 
-    const status = getManualAnalysisStatus(data.requestId);
+    const status = await getManualAnalysisStatus(data.requestId);
     if (!status) {
       return { error: { code: "NOT_FOUND", message: "Analysis request not found" } };
     }

@@ -1,4 +1,6 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { ReportView } from "@/features/reports/report-view";
@@ -18,13 +20,19 @@ export const Route = createFileRoute("/analyze/results")({
 
     if ("error" in result && result.error && typeof result.error === "object") {
       if ("code" in result.error && result.error.code === "NOT_FOUND") {
-        throw redirect({ to: "/analyze" });
+        return { pending: true, requestId: deps.requestId, status: "processing" as const };
       }
       return { error: result.error, requestId: deps.requestId };
     }
 
     if (!result.report) {
-      return { pending: true, requestId: deps.requestId, status: result.status };
+      return {
+        pending: true,
+        requestId: deps.requestId,
+        status: result.status ?? "processing",
+        progress: "progress" in result ? result.progress : undefined,
+        errorMessage: "error" in result ? result.error : undefined,
+      };
     }
 
     return {
@@ -42,8 +50,23 @@ export const Route = createFileRoute("/analyze/results")({
 
 function AnalyzeResultsPage() {
   const data = Route.useLoaderData();
+  const router = useRouter();
 
-  if ("error" in data && data.error) {
+  const isPending = "pending" in data && data.pending;
+  const isFailed =
+    isPending &&
+    (data.status === "failed" ||
+      (typeof data.errorMessage === "string" && data.errorMessage.length > 0));
+
+  useEffect(() => {
+    if (!isPending || isFailed) return;
+    const timer = setInterval(() => {
+      void router.invalidate();
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [isPending, isFailed, router]);
+
+  if ("error" in data && data.error && !isPending) {
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
         <h1 className="font-serif text-2xl font-semibold">Analysis failed</h1>
@@ -58,11 +81,38 @@ function AnalyzeResultsPage() {
     );
   }
 
-  if ("pending" in data && data.pending) {
+  if (isPending) {
+    if (isFailed) {
+      const msg =
+        typeof data.errorMessage === "string"
+          ? data.errorMessage
+          : "Analysis could not be completed.";
+      return (
+        <main className="mx-auto max-w-lg px-6 py-20 text-center">
+          <h1 className="font-serif text-2xl font-semibold">Analysis failed</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{msg}</p>
+          <Link
+            to="/analyze"
+            className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
+          >
+            Try again
+          </Link>
+        </main>
+      );
+    }
+
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
-        <h1 className="font-serif text-2xl font-semibold">Analysis in progress</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Status: {data.status ?? "processing"}</p>
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+        <h1 className="mt-4 font-serif text-2xl font-semibold">Running analysis</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Status: {data.status ?? "processing"}
+          {typeof data.progress === "number" ? ` · ${data.progress}%` : ""}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          This page refreshes automatically. URL articles use metadata and excerpts; paste full text
+          for deeper checks.
+        </p>
       </main>
     );
   }

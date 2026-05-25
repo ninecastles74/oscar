@@ -18,9 +18,9 @@ const bundleSchema = z.object({
   articleId: z.string().min(1).optional(),
 });
 
-function resolveAnalysisContext(requestId?: string, articleId?: string) {
+async function resolveAnalysisContext(requestId?: string, articleId?: string) {
   if (requestId) {
-    const manual = getManualAnalysisResult(requestId);
+    const manual = await getManualAnalysisResult(requestId);
     if (manual) {
       return {
         report: manual.report,
@@ -77,7 +77,7 @@ export const getScoreExplainability = createServerFn({ method: "GET" })
 export const getAnalysisExplainability = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => bundleSchema.parse(data))
   .handler(async ({ data }) => {
-    const ctx = resolveAnalysisContext(data.requestId, data.articleId);
+    const ctx = await resolveAnalysisContext(data.requestId, data.articleId);
     if (!ctx?.report) {
       return { error: { code: "NOT_FOUND", message: "No analysis context for explainability" } };
     }

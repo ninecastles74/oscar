@@ -1,7 +1,10 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
 import { clampScore } from "../../reliability/utils/math";
+import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
 import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
+
+const LLM_TIMEOUT_MS = Number(process.env.LLM_FETCH_TIMEOUT_MS) || 12_000;
 
 const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
 
@@ -18,21 +21,25 @@ export async function verifyClaimWithAnthropic(
   });
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
+    const res = await fetchWithTimeout(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 512,
+          temperature: 0.1,
+          system: `${system}\n\nRespond with JSON only.`,
+          messages: [{ role: "user", content: user }],
+        }),
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: 512,
-        temperature: 0.1,
-        system: `${system}\n\nRespond with JSON only.`,
-        messages: [{ role: "user", content: user }],
-      }),
-    });
+      LLM_TIMEOUT_MS,
+    );
 
     if (!res.ok) return null;
     const data = (await res.json()) as {

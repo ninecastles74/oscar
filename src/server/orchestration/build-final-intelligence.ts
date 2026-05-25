@@ -63,7 +63,12 @@ async function runClaimIntelligencePass(
   let consensusConfidence =
     claim.claimConsensus?.confidence ?? claim.confidence ?? 50;
 
-  if (!claim.multiModelVerification && claim.evidence.length > 0 && trigger !== "scheduled") {
+  if (
+    !claim.multiModelVerification &&
+    claim.evidence.length > 0 &&
+    trigger !== "scheduled" &&
+    process.env.FINAL_INTELLIGENCE_ON_MANUAL === "true"
+  ) {
     try {
       const { verification } = await arbitrateSingleClaim(
         {
