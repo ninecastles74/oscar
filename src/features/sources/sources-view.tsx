@@ -4,15 +4,6 @@ import type { AuthorDirectoryRow, OrganizationDirectoryRow, SourcesDirectory } f
 import { OSCAR } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
-const BIAS_LABEL: Record<string, string> = {
-  left: "Left",
-  "center-left": "Center-left",
-  center: "Center",
-  "center-right": "Center-right",
-  right: "Right",
-  unknown: "Unknown",
-};
-
 function scoreBarClass(score: number): string {
   if (score >= 90) return "bg-success";
   if (score >= 80) return "bg-accent";
@@ -44,7 +35,6 @@ function OrganizationsTable({ rows }: { rows: OrganizationDirectoryRow[] }) {
           <tr>
             <th className="px-4 py-3 text-left">Organisation</th>
             <th className="px-4 py-3 text-left">Domain</th>
-            <th className="px-4 py-3 text-left">Bias</th>
             <th className="px-4 py-3 text-left">Avg. score</th>
             <th className="px-4 py-3 text-right">Articles</th>
             <th className="px-4 py-3 text-right">Source</th>
