@@ -8,7 +8,12 @@ import { classifyCategoriesWithLlm } from "./category-llm";
 import { getNewsIngestionEnv } from "./env";
 import { loadRssFeedRegistry } from "./rss/registry";
 import { resolvePublisher } from "./resolve-publisher";
-import { saveClusterArticles, saveStoryConsensus, getStoryConsensus } from "../consensus/store";
+import {
+  saveClusterArticles,
+  saveStoryConsensus,
+  getStoryConsensus,
+  hydrateStoryConsensusReports,
+} from "../consensus/store";
 import type { IngestNewsResult } from "./ingest";
 import {
   loadFeedStateFromKv,
@@ -137,6 +142,7 @@ export async function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): Pro
   for (const cluster of snapshot.clusters) {
     state.clusters.set(cluster.id, cluster);
   }
+  hydrateStoryConsensusReports(snapshot.consensusReports ?? []);
   state.top100ClusterIds = snapshot.top100ClusterIds;
   state.lastIngestAt = snapshot.lastIngestAt;
   state.lastAnalysisAt = snapshot.lastAnalysisAt;
@@ -146,13 +152,22 @@ export async function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): Pro
 }
 
 export function exportFeedSnapshot(): PersistedFeedState {
+  const consensusReports = state.top100ClusterIds
+    .map((id) => getStoryConsensus(id))
+    .filter((r): r is StoryConsensusReport => !!r);
+
   return {
     articles: [...state.articles.values()].map(slimArticleForPersist),
     clusters: [...state.clusters.values()].map(slimClusterForPersist),
     top100ClusterIds: state.top100ClusterIds,
     lastIngestAt: state.lastIngestAt,
     lastAnalysisAt: state.lastAnalysisAt,
+    consensusReports,
   };
+}
+
+export async function persistFeedToKv(): Promise<void> {
+  await persistFeedAsync();
 }
 
 /** Load Top 100 from KV once per isolate (Workers have no shared RAM between requests). */
@@ -225,7 +240,7 @@ export function mergeIngestIntoFeed(ingest: IngestNewsResult): FeedMergeResult {
         lastSeenAt: publishedAt,
       });
     }
-    if (members.length >= 2) {
+    if (members.length >= 1) {
       saveClusterArticles(cluster.id, members);
     }
   }
@@ -334,6 +349,13 @@ export function setLastAnalysisAt(iso: string): void {
 }
 
 export function getStoredCluster(clusterId: string): StoredCluster | undefined {
+  return state.clusters.get(clusterId);
+}
+
+export async function getStoredClusterHydrated(
+  clusterId: string,
+): Promise<StoredCluster | undefined> {
+  await ensureFeedHydratedFromKv();
   return state.clusters.get(clusterId);
 }
 

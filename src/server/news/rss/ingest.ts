@@ -5,6 +5,7 @@ import { fetchWithRateLimit } from "../providers/http";
 import type { ProviderContext, ProviderFetchResult, RawArticle } from "../providers/types";
 import { extractClaimsFromRssSummary } from "./claims";
 import { sanitizeRssSummary } from "./content-policy";
+import { capItemsPerFeed, interleaveFeedBuckets, perFeedArticleLimit } from "./collect-registry-items";
 import { parseFeedXml } from "./parser";
 import type { PublisherFeedConfig } from "../env";
 import { loadRssFeedRegistry, type RssFeedRegistryEntry } from "./registry";
@@ -55,7 +56,7 @@ export function rssItemsToRaw(
       contentPolicy: feed.contentPolicy,
       allowFullText: feed.contentPolicy === "licensed_full_text",
       extractedClaims: claims,
-      sourceId: feed.id,
+      sourceId: feed.sourceId,
     };
   });
 }
@@ -77,10 +78,12 @@ export async function fetchRssFromRegistry(
   }
 
   const start = Date.now();
-  const allRaw: RawArticle[] = [];
+  const buckets = new Map<string, RawArticle[]>();
   const errors: string[] = [];
+  const feedsSucceeded: string[] = [];
 
   for (const feed of registry) {
+    const perFeedMax = perFeedArticleLimit(registry.length, ctx.maxArticles, feed);
     try {
       const res = await fetchWithRateLimit(`${provider}:${feed.id}`, feed.feedUrl, env, {
         headers: {
@@ -90,7 +93,13 @@ export async function fetchRssFromRegistry(
       });
       const xml = await res.text();
       const items = parseFeedXml(xml, feed);
-      allRaw.push(...rssItemsToRaw(items, feed));
+      const raw = capItemsPerFeed(rssItemsToRaw(items, feed), perFeedMax);
+      if (raw.length > 0) {
+        buckets.set(feed.id, raw);
+        feedsSucceeded.push(feed.id);
+      } else {
+        errors.push(`${feed.id}: feed returned zero items`);
+      }
     } catch (err) {
       const msg =
         err instanceof IngestionError
@@ -102,7 +111,7 @@ export async function fetchRssFromRegistry(
     }
   }
 
-  if (allRaw.length === 0 && errors.length > 0) {
+  if (buckets.size === 0 && errors.length > 0) {
     throw new IngestionError({
       code: "PARSE_ERROR",
       provider,
@@ -110,14 +119,22 @@ export async function fetchRssFromRegistry(
     });
   }
 
-  const articles = await normalizeArticles(allRaw.slice(0, ctx.maxArticles));
+  const merged = interleaveFeedBuckets(buckets, ctx.maxArticles);
+  const articles = await normalizeArticles(merged);
+
+  if (errors.length > 0) {
+    console.warn(
+      `[rss-ingest] ${feedsSucceeded.length}/${registry.length} feeds OK; failures: ${errors.join("; ")}`,
+    );
+  }
 
   return {
     provider,
     articles,
-    fetched: allRaw.length,
-    skipped: allRaw.length - articles.length,
+    fetched: merged.length,
+    skipped: merged.length - articles.length,
     durationMs: Date.now() - start,
+    warnings: errors.length > 0 ? errors : undefined,
   };
 }
 

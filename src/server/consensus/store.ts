@@ -19,3 +19,13 @@ export function saveStoryConsensus(report: StoryConsensusReport): void {
 export function getStoryConsensus(clusterId: string): StoryConsensusReport | undefined {
   return consensusByCluster.get(clusterId);
 }
+
+export function listAllStoryConsensus(): StoryConsensusReport[] {
+  return [...consensusByCluster.values()];
+}
+
+export function hydrateStoryConsensusReports(reports: StoryConsensusReport[]): void {
+  for (const report of reports) {
+    if (report?.clusterId) consensusByCluster.set(report.clusterId, report);
+  }
+}

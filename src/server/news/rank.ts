@@ -52,6 +52,36 @@ export interface RankStats {
   top100Count: number;
 }
 
+function outletKeyForCluster(cluster: StoryCluster, members: NewsArticle[]): string {
+  const label = cluster.primarySourceName?.trim() || members[0]?.sourceName?.trim();
+  if (label) return label.toLowerCase();
+  return extractDomain(members[0]?.sourceDomain ?? "unknown");
+}
+
+/** Reserve one slot per outlet in Top 100 so major agencies are not crowded out. */
+function ensureOutletRepresentationInTop(
+  ranked: RankedCluster[],
+  byCluster: Map<string, NewsArticle[]>,
+  limit: number,
+): RankedCluster[] {
+  const reserved: RankedCluster[] = [];
+  const seen = new Set<string>();
+  const rest: RankedCluster[] = [];
+
+  for (const cluster of ranked) {
+    const members = byCluster.get(cluster.id) ?? [];
+    const key = outletKeyForCluster(cluster, members);
+    if (!seen.has(key)) {
+      seen.add(key);
+      reserved.push(cluster);
+    } else {
+      rest.push(cluster);
+    }
+  }
+
+  return [...reserved, ...rest].slice(0, limit);
+}
+
 /**
  * Rank story clusters for Top 100: recency, source importance, source count/diversity, velocity.
  */
@@ -92,7 +122,8 @@ export function rankTopClusters(
   });
 
   ranked.sort((a, b) => b.rankScore - a.rankScore);
-  const top = ranked.slice(0, limit);
+  const diversified = ensureOutletRepresentationInTop(ranked, byCluster, limit);
+  const top = diversified.slice(0, limit);
   const top100: StoryCluster[] = top.map(
     ({ rankScore: _r, rankBreakdown: _b, ...cluster }) => cluster,
   );

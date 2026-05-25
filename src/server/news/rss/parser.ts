@@ -3,6 +3,7 @@ import type { ArticleImageSource } from "@/types/news-platform";
 import { coerceCategory } from "../normalize";
 import { inferArticleCategory } from "../category-inference";
 import { isLikelyFullArticleBody, sanitizeRssSummary, stripHtml } from "./content-policy";
+import { parseFeedAuthor } from "./feed-author";
 import type { RssFeedRegistryEntry } from "./registry";
 
 export interface ParsedRssItem {
@@ -93,7 +94,7 @@ function parseRss2Items(xml: string, feed: RssFeedRegistryEntry): ParsedRssItem[
     const rawDesc = pickDescription(block, title);
     const { summary } = sanitizeRssSummary(rawDesc, title);
     const pubDate = tagContent(block, "pubDate") ?? tagContent(block, "dc:date");
-    const author = tagContent(block, "dc:creator") ?? tagContent(block, "author") ?? undefined;
+    const author = parseFeedAuthor(block, "rss");
     const { url: imageUrl, source: imageSource } = parseImage(block, feed.includeImage);
     const category = parseCategories(block, feed.category, title, summary);
     const externalId = tagContent(block, "guid") ?? link;
@@ -126,7 +127,7 @@ function parseAtomItems(xml: string, feed: RssFeedRegistryEntry): ParsedRssItem[
     const desc = isLikelyFullArticleBody(rawDesc) ? title : stripHtml(rawDesc);
     const { summary } = sanitizeRssSummary(desc, title);
     const updated = tagContent(block, "updated") ?? tagContent(block, "published");
-    const author = tagContent(block, "author") ?? tagContent(block, "name") ?? undefined;
+    const author = parseFeedAuthor(block, "atom");
     const { url: imageUrl, source: imageSource } = parseImage(block, feed.includeImage);
     const category = parseCategories(block, feed.category, title, summary);
 

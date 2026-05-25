@@ -95,7 +95,7 @@ export function getNewsIngestionEnv(): NewsIngestionEnv {
     publisherFeeds: parsePublisherFeeds(readString("PUBLISHER_FEEDS_JSON")),
     enabledProviders: enabled,
     fetchTimeoutMs: readInt("NEWS_FETCH_TIMEOUT_MS", 15_000),
-    ingestMaxArticlesPerProvider: readInt("NEWS_INGEST_MAX_ARTICLES_PER_PROVIDER", 100),
+    ingestMaxArticlesPerProvider: readInt("NEWS_INGEST_MAX_ARTICLES_PER_PROVIDER", 150),
     ingestCountry: readString("NEWS_INGEST_COUNTRY") ?? "us",
     ingestLanguage: readString("NEWS_INGEST_LANGUAGE") ?? "en",
     rateLimits: {

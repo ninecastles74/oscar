@@ -1,4 +1,4 @@
-import type { StoryCluster } from "@/types/news-platform";
+import type { StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { getFeedKv, isFeedKvConfigured } from "./worker-env";
 import type { StoredArticle, StoredCluster } from "./feed-store";
 
@@ -12,6 +12,7 @@ export interface PersistedFeedState {
   top100ClusterIds: string[];
   lastIngestAt?: string;
   lastAnalysisAt?: string;
+  consensusReports?: StoryConsensusReport[];
 }
 
 export function exportFeedState(input: {

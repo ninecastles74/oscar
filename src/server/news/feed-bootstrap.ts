@@ -48,7 +48,7 @@ export async function bootstrapFeedIfEmpty(): Promise<BootstrapResult> {
   try {
     const ingest = await ingestNews({
       providers: configured as ApiProviderId[],
-      maxArticlesPerProvider: Math.min(env.ingestMaxArticlesPerProvider, 40),
+      maxArticlesPerProvider: Math.max(env.ingestMaxArticlesPerProvider, 120),
       topN: 100,
     });
 

@@ -12,7 +12,8 @@ import { getClusterArticles, getStoryConsensus, saveStoryConsensus } from "./sto
 import {
   getArticleBundle,
   getClusterArticlesFromStore,
-  getStoredCluster,
+  getStoredClusterHydrated,
+  persistFeedToKv,
   updateClusterFromConsensus,
 } from "../news/feed-store";
 import { stableArticleId } from "../news/utils/text";
@@ -138,6 +139,7 @@ async function ensureFeedConsensusReport(
       : runStoryConsensusForCluster(cluster, articles);
   saveStoryConsensus(report);
   updateClusterFromConsensus(cluster.id, report);
+  void persistFeedToKv();
   return report;
 }
 
@@ -145,7 +147,7 @@ async function ensureFeedConsensusReport(
 export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => clusterIdSchema.parse(data))
   .handler(async ({ data }) => {
-    const cluster = getStoredCluster(data.clusterId);
+    const cluster = await getStoredClusterHydrated(data.clusterId);
     if (!cluster) {
       return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     }
@@ -179,7 +181,7 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    const cluster = getStoredCluster(data.clusterId);
+    const cluster = await getStoredClusterHydrated(data.clusterId);
     if (!cluster) {
       return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     }

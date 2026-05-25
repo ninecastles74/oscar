@@ -60,7 +60,7 @@ export async function ingestNews(options: IngestNewsOptions = {}): Promise<Inges
 
   for (const cluster of clusters) {
     const members = clusteredArticles.filter((a) => a.clusterId === cluster.id);
-    if (members.length >= 2) {
+    if (members.length >= 1) {
       saveClusterArticles(cluster.id, members);
     }
   }

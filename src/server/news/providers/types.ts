@@ -39,6 +39,8 @@ export interface ProviderFetchResult {
   fetched: number;
   skipped: number;
   durationMs: number;
+  /** Per-feed partial failures (ingest still succeeded). */
+  warnings?: string[];
 }
 
 export interface ProviderContext {
