@@ -4,6 +4,7 @@ import { canonicalizeUrl, extractDomain } from "./utils/url";
 import { contentHash, stableArticleId } from "./utils/text";
 import type { RawArticle } from "./providers/types";
 import { inferArticleCategory } from "./category-inference";
+import { classifyCategoriesWithLlm } from "./category-llm";
 import { resolvePublisher } from "./resolve-publisher";
 
 const CATEGORY_MAP: Record<string, Category> = {
@@ -118,5 +119,14 @@ export async function normalizeArticles(raw: RawArticle[]): Promise<NewsArticle[
     const n = await normalizeArticle(r);
     if (n) out.push(n);
   }
-  return out;
+
+  const llmCategories = await classifyCategoriesWithLlm(
+    out.map((a) => ({ key: a.id, title: a.title })),
+  );
+  if (llmCategories.size === 0) return out;
+
+  return out.map((a) => ({
+    ...a,
+    category: llmCategories.get(a.id) ?? a.category,
+  }));
 }

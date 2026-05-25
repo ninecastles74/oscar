@@ -34,8 +34,18 @@ function hoursBetween(a: string, b: string): number {
   return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 3_600_000;
 }
 
+function pickClusterLead(members: NewsArticle[]): NewsArticle | undefined {
+  if (!members.length) return undefined;
+  return [...members].sort((a, b) => {
+    const rb = reliabilityForDomain(b.sourceDomain) - reliabilityForDomain(a.sourceDomain);
+    if (rb !== 0) return rb;
+    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+  })[0];
+}
+
 export function enrichClusterFromMembers(cluster: StoryCluster, members: NewsArticle[]): StoryCluster {
-  const { primarySourceName, sourceNames } = uniqueSourceLabels(members);
+  const lead = pickClusterLead(members);
+  const { primarySourceName, sourceNames } = uniqueSourceLabels(members, lead);
   return {
     ...cluster,
     category: members.length ? dominantCategoryFromArticles(members) : cluster.category,
@@ -45,7 +55,10 @@ export function enrichClusterFromMembers(cluster: StoryCluster, members: NewsArt
   };
 }
 
-function uniqueSourceLabels(members: NewsArticle[]): { primarySourceName: string; sourceNames: string[] } {
+function uniqueSourceLabels(
+  members: NewsArticle[],
+  lead?: NewsArticle,
+): { primarySourceName: string; sourceNames: string[] } {
   const names: string[] = [];
   const seen = new Set<string>();
   for (const m of members) {
@@ -55,7 +68,7 @@ function uniqueSourceLabels(members: NewsArticle[]): { primarySourceName: string
     names.push(label);
   }
   return {
-    primarySourceName: names[0] ?? members[0]?.sourceName ?? "Unknown",
+    primarySourceName: lead?.sourceName?.trim() || names[0] || members[0]?.sourceName || "Unknown",
     sourceNames: names,
   };
 }
@@ -128,7 +141,7 @@ export function clusterArticles(articles: NewsArticle[]): {
     }
 
     const sourceDiversity = domains.size / Math.max(1, members.length);
-    const { primarySourceName, sourceNames } = uniqueSourceLabels(members);
+    const { primarySourceName, sourceNames } = uniqueSourceLabels(members, lead);
 
     clusters.push({
       id: clusterId,

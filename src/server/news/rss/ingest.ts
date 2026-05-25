@@ -55,7 +55,7 @@ export function rssItemsToRaw(
       contentPolicy: feed.contentPolicy,
       allowFullText: feed.contentPolicy === "licensed_full_text",
       extractedClaims: claims,
-      sourceId: feed.sourceId,
+      sourceId: feed.id,
     };
   });
 }

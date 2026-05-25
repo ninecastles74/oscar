@@ -4,6 +4,10 @@ import type { AnalyzedArticleBundle } from "../consensus/types";
 import { rankTopClusters } from "./rank";
 import { enrichClusterFromMembers } from "./cluster";
 import { inferArticleCategory } from "./category-inference";
+import { classifyCategoriesWithLlm } from "./category-llm";
+import { getNewsIngestionEnv } from "./env";
+import { loadRssFeedRegistry } from "./rss/registry";
+import { resolvePublisher } from "./resolve-publisher";
 import { saveClusterArticles, saveStoryConsensus, getStoryConsensus } from "../consensus/store";
 import type { IngestNewsResult } from "./ingest";
 import {
@@ -64,11 +68,50 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function refreshStoredArticleCategories(): void {
+function feedDisplayName(feedId: string | undefined): string | undefined {
+  if (!feedId) return undefined;
+  const feeds = loadRssFeedRegistry(getNewsIngestionEnv().rssFeedUrls);
+  return feeds.find((f) => f.id === feedId)?.name;
+}
+
+async function refreshStoredArticlePublishers(): Promise<void> {
   for (const [id, article] of state.articles) {
-    const category = inferArticleCategory(article.title, article.description, article.category);
+    const label = feedDisplayName(article.ingestMetadata?.feedId) ?? article.sourceName;
+    const pub = resolvePublisher({
+      sourceId: article.sourceId,
+      sourceDomain: article.sourceDomain,
+      sourceName: label,
+      url: article.url,
+    });
+    if (
+      pub.sourceName !== article.sourceName ||
+      pub.sourceDomain !== article.sourceDomain ||
+      pub.sourceId !== article.sourceId
+    ) {
+      state.articles.set(id, {
+        ...article,
+        sourceName: pub.sourceName,
+        sourceDomain: pub.sourceDomain,
+        sourceId: pub.sourceId,
+      });
+    }
+  }
+}
+
+async function refreshStoredArticleCategories(): Promise<void> {
+  const list = [...state.articles.values()];
+  if (!list.length) return;
+
+  const llmCategories = await classifyCategoriesWithLlm(
+    list.map((a) => ({ key: a.id, title: a.title })),
+  );
+
+  for (const article of list) {
+    const category =
+      llmCategories.get(article.id) ??
+      inferArticleCategory(article.title, article.description, article.category);
     if (category !== article.category) {
-      state.articles.set(id, { ...article, category });
+      state.articles.set(article.id, { ...article, category });
     }
   }
 }
@@ -84,7 +127,7 @@ export function listAllStoredArticles(): NewsArticle[] {
   return [...state.articles.values()];
 }
 
-export function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): void {
+export async function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): Promise<void> {
   state.articles.clear();
   state.clusters.clear();
   state.articleBundles.clear();
@@ -97,7 +140,8 @@ export function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): void {
   state.top100ClusterIds = snapshot.top100ClusterIds;
   state.lastIngestAt = snapshot.lastIngestAt;
   state.lastAnalysisAt = snapshot.lastAnalysisAt;
-  refreshStoredArticleCategories();
+  await refreshStoredArticlePublishers();
+  await refreshStoredArticleCategories();
   refreshClusterDisplayFields();
 }
 
@@ -118,7 +162,7 @@ export async function ensureFeedHydratedFromKv(): Promise<boolean> {
     if (state.top100ClusterIds.length > 0) return true;
     const snapshot = await loadFeedStateFromKv();
     if (!snapshot || snapshot.top100ClusterIds.length === 0) return false;
-    hydrateFeedFromSnapshot(snapshot);
+    await hydrateFeedFromSnapshot(snapshot);
     return true;
   })();
   return hydratePromise;

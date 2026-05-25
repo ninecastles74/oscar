@@ -26,18 +26,29 @@ export function resolvePublisher(input: {
   sourceName?: string;
   url?: string;
 }): ResolvedPublisher {
-  const domain = extractDomain(input.sourceDomain || input.url || "unknown");
-  const byId = input.sourceId
-    ? APPROVED_SOURCES.find((s) => s.id === input.sourceId)
-    : undefined;
+  const articleDomain = extractDomain(input.url || "");
+  const feedDomain = extractDomain(input.sourceDomain || "");
+  const domain =
+    articleDomain !== "unknown"
+      ? articleDomain
+      : feedDomain !== "unknown"
+        ? feedDomain
+        : "unknown";
+
+  const feedLabel = input.sourceName?.trim();
   const byDomain = matchByDomain(domain);
-  const src = byId ?? byDomain;
+  // Shared registry ids (e.g. s3 for all BBC feeds) must not override the feed's display name.
+  const byId =
+    !byDomain && input.sourceId
+      ? APPROVED_SOURCES.find((s) => s.id === input.sourceId)
+      : undefined;
+  const src = byDomain ?? byId;
 
   if (src) {
     return {
       sourceId: src.id,
-      sourceName: src.name,
-      sourceDomain: src.domain,
+      sourceName: feedLabel || src.name,
+      sourceDomain: domain !== "unknown" ? domain : src.domain,
     };
   }
 
