@@ -19,8 +19,8 @@ export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): 
   if (forTrigger === "scheduled" && isServerEnvFalse("SCHEDULED_USE_MULTI_MODEL")) {
     return false;
   }
-  // Ask Oscar always runs multi-model (live APIs when keys exist, heuristics otherwise).
-  if (forTrigger === "user") return true;
+  // User + scheduled feed analysis always run multi-model when not explicitly disabled.
+  if (forTrigger === "user" || forTrigger === "scheduled") return true;
   return (
     isServerEnvTruthy("OPENAI_API_KEY") ||
     isServerEnvTruthy("ANTHROPIC_API_KEY") ||

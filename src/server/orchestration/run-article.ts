@@ -15,7 +15,7 @@ export async function runArticleAnalysisOrchestration(
   const stages: ArticleOrchestrationReport["stagesCompleted"] = ["verification"];
   const trigger = input.trigger ?? "user";
 
-  let bundle = runVerificationPipeline(input.article);
+  let bundle = await runVerificationPipeline(input.article);
   if (!input.skipMultiModel) {
     bundle = await enrichVerificationWithMultiModel(bundle, trigger);
     stages.push("multi_model");

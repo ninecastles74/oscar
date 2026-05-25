@@ -1,33 +1,51 @@
 import type { PipelineArticleContext } from "../types";
 import { classifyClaims } from "./classifyClaims";
-import { classifyTopicsForPipeline } from "./classifyTopics";
+import { classifyTopics } from "../topics/classify-topics";
 import { compareSources } from "./compareSources";
 import { runContradictionAnalysisBatch } from "../../contradiction";
 import { extractClaims } from "./extractClaims";
+import { extractClaimsWithLlm } from "./extractClaimsLlm";
 import { generateFinalReport } from "./generateFinalReport";
 import { retrieveEvidence } from "./retrieveEvidence";
 import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
+import { isGoogleAiConfigured } from "../../ai/google-api-key";
+import { isServerEnvTruthy } from "../../env/server-env";
 
 export { VERDICT_LABELS } from "./types";
 export type { VerificationPipelineResults, VerificationReportBundle } from "./types";
 
 /**
- * Full verification pipeline — per-claim only, evidence-backed conclusions.
+ * Full verification pipeline — uses LLM claim/topic steps when API keys are configured.
  */
-export function runVerificationPipeline(article: PipelineArticleContext): VerificationReportBundle {
+export async function runVerificationPipeline(
+  article: PipelineArticleContext,
+): Promise<VerificationReportBundle> {
   const startedAt = Date.now();
   const stages: string[] = [];
 
   stages.push("extractClaims");
-  const raw = extractClaims(article.analysisText, article.submissionId);
+  let raw = await extractClaimsWithLlm(article.analysisText, article.submissionId);
+  if (raw?.length) {
+    stages.push("extractClaimsLlm");
+  } else {
+    raw = extractClaims(article.analysisText, article.submissionId);
+    stages.push("extractClaimsHeuristic");
+  }
 
   stages.push("classifyClaims");
   const classified = classifyClaims(raw);
 
   stages.push("classifyTopics");
-  const topicResult = classifyTopicsForPipeline(article, classified);
+  const topicResult = await classifyTopics({
+    title: article.title,
+    summary: article.summary,
+    body: article.analysisText,
+    claims: classified.map((c) => ({ id: c.id, text: c.text })),
+  });
+  if (topicResult.article.classifier !== "keyword") stages.push("classifyTopicsLlm");
+
   const classifiedWithTopics = classified.map((c) => ({
     ...c,
     topicClassification: topicResult.claimClassifications[c.id],

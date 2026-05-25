@@ -43,14 +43,20 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
 }
 
 /** Full pipeline + multi-model + reliability for one article (scheduled, no user quota). */
+function bundleNeedsAiReanalysis(bundle: AnalyzedArticleBundle): boolean {
+  return !bundle.report.multiModelVerification;
+}
+
 export async function analyzeArticleHeavyweight(
   article: NewsArticle,
+  options?: { force?: boolean },
 ): Promise<AnalyzedArticleBundle> {
-  const existing = getArticleBundle(article.id || stableArticleId(article.url));
-  if (existing) return existing;
+  const key = article.id || stableArticleId(article.url);
+  const existing = getArticleBundle(key);
+  if (existing && !options?.force && !bundleNeedsAiReanalysis(existing)) return existing;
 
   const ctx = articleToPipeline(article);
-  let bundle = runVerificationPipeline(ctx);
+  let bundle = await runVerificationPipeline(ctx);
   bundle = await enrichVerificationWithMultiModel(bundle, "scheduled");
   const { report, results } = bundle;
 

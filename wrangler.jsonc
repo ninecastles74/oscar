@@ -5,6 +5,10 @@
   "compatibility_flags": [
     "nodejs_compat_populate_process_env","nodejs_compat"],
   "main": "src/server.ts",
+  "vars": {
+    "MULTI_MODEL_VERIFICATION_ENABLED": "true",
+    "SCHEDULED_USE_MULTI_MODEL": "true"
+  },
   // Free Workers: max 5 cron triggers per *account* (not per Worker). Keep ≤4 here
   // if you use crons on other Workers. Daily reliability jobs share one schedule.
   "triggers": {

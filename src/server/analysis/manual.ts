@@ -154,7 +154,7 @@ export async function executeManualAnalysis(requestId: string): Promise<void> {
     request.progress = 35;
     syncManualRequest(request);
 
-    let bundle = runVerificationPipeline(pipelineArticle);
+    let bundle = await runVerificationPipeline(pipelineArticle);
       console.log(
         "[executeManualAnalysis] AI diagnostics",
         JSON.stringify(getAiAnalysisDiagnostics()),

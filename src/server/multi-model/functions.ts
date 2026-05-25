@@ -23,7 +23,7 @@ export const runMultiModelClaimVerification = createServerFn({ method: "POST" })
       rightsNote: "User text for multi-model verification.",
     };
 
-    const bundle = runVerificationPipeline(article);
+    const bundle = await runVerificationPipeline(article);
     const enriched = await enrichVerificationWithMultiModel(bundle);
     return {
       report: enriched.report,

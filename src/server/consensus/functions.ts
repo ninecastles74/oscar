@@ -90,7 +90,7 @@ export const runStoryConsensus = createServerFn({ method: "POST" })
         claimIds: [],
         trendingScore: 0,
       };
-      const report = runStoryConsensusForCluster(cluster, articles);
+      const report = await runStoryConsensusForCluster(cluster, articles);
       saveStoryConsensus(report);
       return { report, storyExplainability: buildStoryScoreExplainability(report) };
     } catch (err) {
@@ -156,10 +156,7 @@ async function ensureFeedConsensusReport(
     syncStoryScoresToArticlePages(articles, cached);
     return cached;
   }
-  const report =
-    articles.length === 1
-      ? await runHeavyweightClusterAnalysis(cluster, articles)
-      : runStoryConsensusForCluster(cluster, articles);
+  const report = await runHeavyweightClusterAnalysis(cluster, articles);
   saveStoryConsensus(report);
   updateClusterFromConsensus(cluster.id, report);
   syncStoryScoresToArticlePages(articles, report);

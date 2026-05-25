@@ -26,7 +26,7 @@ export const runClaimConsensusEngine = createServerFn({ method: "POST" })
       rightsNote: "User text for claim consensus engine.",
     };
 
-    let bundle = runVerificationPipeline(article);
+    let bundle = await runVerificationPipeline(article);
     bundle = await enrichVerificationWithMultiModel(bundle);
 
     const reliability = computeAndStoreReliabilityScores({
