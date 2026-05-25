@@ -6,6 +6,7 @@ import { OSCAR } from "@/lib/brand";
 export const NAV_ITEMS = [
   { to: "/dashboard", label: OSCAR.signals },
   { to: "/stories", label: "Top 100" },
+  { to: "/sources", label: "Sources" },
   { to: "/analyze", label: OSCAR.ask },
   { to: "/pricing", label: "Plans" },
   { to: "/login", label: "Sign in" },

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as StoriesRouteImport } from './routes/stories'
+import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -29,6 +30,11 @@ import { Route as StoriesClusterIdArticleIdRouteImport } from './routes/stories.
 const StoriesRoute = StoriesRouteImport.update({
   id: '/stories',
   path: '/stories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SourcesRoute = SourcesRouteImport.update({
+  id: '/sources',
+  path: '/sources',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sources': typeof SourcesRoute
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sources': typeof SourcesRoute
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sources': typeof SourcesRoute
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/settings'
     | '/sitemap.xml'
+    | '/sources'
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/settings'
     | '/sitemap.xml'
+    | '/sources'
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/settings'
     | '/sitemap.xml'
+    | '/sources'
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
@@ -229,6 +241,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   SettingsRoute: typeof SettingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  SourcesRoute: typeof SourcesRoute
   StoriesRoute: typeof StoriesRouteWithChildren
   AdminSourcesRoute: typeof AdminSourcesRoute
   ClaimsClaimIdRoute: typeof ClaimsClaimIdRoute
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       path: '/stories'
       fullPath: '/stories'
       preLoaderRoute: typeof StoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sources': {
+      id: '/sources'
+      path: '/sources'
+      fullPath: '/sources'
+      preLoaderRoute: typeof SourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sitemap.xml': {
@@ -395,6 +415,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   SettingsRoute: SettingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  SourcesRoute: SourcesRoute,
   StoriesRoute: StoriesRouteWithChildren,
   AdminSourcesRoute: AdminSourcesRoute,
   ClaimsClaimIdRoute: ClaimsClaimIdRoute,

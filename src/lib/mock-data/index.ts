@@ -3,6 +3,7 @@
 
 export * from "./types";
 export * from "./sources";
+export * from "./authors";
 export * from "./clusters";
 export * from "./stories";
 export * from "./claims";
