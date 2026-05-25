@@ -1,6 +1,5 @@
 import { mirrorWorkerEnvToProcessEnv } from "../env/server-env";
 
-/** Minimal KV types (Cloudflare binding). */
 export interface FeedKvNamespace {
   get(key: string, type: "json"): Promise<unknown>;
   get(key: string): Promise<string | null>;
@@ -8,7 +7,6 @@ export interface FeedKvNamespace {
   delete(key: string): Promise<void>;
 }
 
-/** Cloudflare Worker bindings (KV, secrets, etc.) — set from src/server.ts on each invocation. */
 export interface OscarWorkerBindings {
   FEED_KV?: FeedKvNamespace;
   [key: string]: unknown;
@@ -26,7 +24,10 @@ export function setWorkerBindings(env: unknown): void {
   bindings = null;
 }
 
-/** Register Cloudflare execution context for background work (manual analysis, etc.). */
+export function getWorkerBindingsRecord(): Record<string, unknown> | null {
+  return bindings;
+}
+
 export function setWorkerExecutionContext(ctx: unknown): void {
   if (ctx && typeof ctx === "object" && "waitUntil" in ctx) {
     const w = (ctx as { waitUntil: (p: Promise<unknown>) => void }).waitUntil;
@@ -36,7 +37,6 @@ export function setWorkerExecutionContext(ctx: unknown): void {
   backgroundWaitUntil = null;
 }
 
-/** Run work after the HTTP response (Workers) or fire-and-forget locally. */
 export function runInWorkerBackground(promise: Promise<unknown>): void {
   if (backgroundWaitUntil) {
     backgroundWaitUntil(promise);

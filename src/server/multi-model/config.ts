@@ -8,7 +8,6 @@ export const MODEL_WEIGHTS = {
   corroboration: 0.17,
 } as const;
 
-/** Claims below this confidence (after primary) trigger Claude review. */
 export const REVIEW_CONFIDENCE_THRESHOLD = 58;
 
 export const REVIEW_VERDICTS: Verdict[] = ["disputed", "unclear", "insufficient_evidence"];
@@ -16,10 +15,12 @@ export const REVIEW_VERDICTS: Verdict[] = ["disputed", "unclear", "insufficient_
 export const DISAGREEMENT_CONFIDENCE_SPREAD = 22;
 
 export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): boolean {
+  if (isServerEnvFalse("MULTI_MODEL_VERIFICATION_ENABLED")) return false;
   if (forTrigger === "scheduled" && isServerEnvFalse("SCHEDULED_USE_MULTI_MODEL")) {
     return false;
   }
-  if (isServerEnvFalse("MULTI_MODEL_VERIFICATION_ENABLED")) return false;
+  // Ask Oscar always runs multi-model (live APIs when keys exist, heuristics otherwise).
+  if (forTrigger === "user") return true;
   return (
     isServerEnvTruthy("OPENAI_API_KEY") ||
     isServerEnvTruthy("ANTHROPIC_API_KEY") ||
@@ -36,7 +37,6 @@ export function availableProviders(): ModelProviderId[] {
   return out;
 }
 
-/** True when a live Gemini corroboration call should run (not heuristic-only). */
 export function isGeminiLiveEnabled(): boolean {
   return isGoogleAiConfigured();
 }

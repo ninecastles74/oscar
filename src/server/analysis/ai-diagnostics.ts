@@ -1,30 +1,34 @@
+import { listDetectedAiEnvKeys } from "../env/server-env";
 import { getMultiModelProviderStatus } from "../multi-model/provider-status";
-import { getGoogleAiApiKey } from "../ai/google-api-key";
+import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
+import { getWorkerBindingsRecord, isFeedKvConfigured } from "../news/worker-env";
+import { isMultiModelEnabled } from "../multi-model/config";
 
 export function getAiAnalysisDiagnostics() {
   const user = getMultiModelProviderStatus("user");
   const scheduled = getMultiModelProviderStatus("scheduled");
-
-  const googleKeyPresent = !!getGoogleAiApiKey();
+  const detectedKeys = listDetectedAiEnvKeys();
+  const bindings = getWorkerBindingsRecord();
+  const bindingKeyNames = bindings ? Object.keys(bindings).filter((k) => !k.startsWith("__")).sort() : [];
 
   return {
     user,
     scheduled,
+    multiModelWouldRun: { user: isMultiModelEnabled("user"), scheduled: isMultiModelEnabled("scheduled") },
+    googleConfigured: isGoogleAiConfigured(),
+    googleKeyDetected: !!getGoogleAiApiKey(),
+    detectedAiEnvKeys: detectedKeys,
+    workerBindingKeyNames: bindingKeyNames,
+    feedKvConfigured: isFeedKvConfigured(),
     pipelineNotes: [
-      "Claim extraction, evidence, and story consensus are rule-based — they never call OpenAI/Claude/Gemini.",
-      "Live LLM calls happen only in multi-model verification (OpenAI primary, Claude review, Gemini corroboration).",
-      "Story Consensus on /stories is cross-article alignment only — no external AI APIs.",
+      "Claim extraction and story consensus never call paid LLM APIs.",
+      "Ask Oscar always runs multi-model verification; live calls require keys on the Worker.",
     ],
-    productionChecklist: [
-      "Add GEMINI_API_KEY or GOOGLE_AI_API_KEY as a Cloudflare Workers Secret (not a plain Variable).",
-      "Redeploy after adding secrets.",
-      "On Ask Oscar results, check Multi-model section: Live Gemini calls should be > 0.",
-      "Per-claim panels should not say heuristic / offline for Gemini when configured.",
-    ],
-    likelyOfflineReason: !googleKeyPresent
-      ? "No Google API key visible to the Worker runtime."
-      : user.multiModelEnabled
-        ? "Keys may be set but Gemini HTTP failed (model name, quota, or API error) — check Worker logs."
-        : "MULTI_MODEL_VERIFICATION_ENABLED=false or no provider keys detected.",
+    likelyOfflineReason:
+      detectedKeys.length === 0
+        ? "Worker runtime sees no API keys — add GEMINI_API_KEY as Secret on the oscar Worker and redeploy."
+        : !user.googleConfigured
+          ? "Keys not mapped to GOOGLE_AI_API_KEY / GEMINI_API_KEY names."
+          : "Keys visible; if Live Gemini calls = 0, check Worker logs for [gemini] API errors.",
   };
 }

@@ -3,6 +3,7 @@ import { AnalysisError } from "./errors";
 import type { AnalysisTrigger } from "./context";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { enrichVerificationWithMultiModel } from "../multi-model";
+import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
 import { runVerificationPipeline } from "./verification";
 import {
   computeAndStoreReliabilityScores,
@@ -154,6 +155,10 @@ export async function executeManualAnalysis(requestId: string): Promise<void> {
     syncManualRequest(request);
 
     let bundle = runVerificationPipeline(pipelineArticle);
+      console.log(
+        "[executeManualAnalysis] AI diagnostics",
+        JSON.stringify(getAiAnalysisDiagnostics()),
+      );
     bundle = await enrichVerificationWithMultiModel(bundle, "user");
     const { report, results } = bundle;
 

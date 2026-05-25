@@ -200,7 +200,17 @@ export function ReportView({
         </div>
       </div>
 
-      {platformReport?.multiModelVerification && (
+      {platformReport?.multiModelVerification &&
+          platformReport.multiModelVerification.geminiUsage?.configured &&
+          (platformReport.multiModelVerification.geminiUsage?.liveApiCalls ?? 0) === 0 && (
+            <div className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+              <strong>No live AI API calls were made.</strong> Oscar ran offline heuristics only. Add{" "}
+              <code className="text-xs">GEMINI_API_KEY</code> (or <code className="text-xs">GOOGLE_AI_API_KEY</code>)
+              as a Cloudflare Workers <em>Secret</em> on the <code className="text-xs">oscar</code> worker, redeploy,
+              then run a new analysis.
+            </div>
+          )}
+        {platformReport?.multiModelVerification && (
         <div className="mt-8 rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Multi-model AI (OpenAI · Claude · Gemini)</h2>
           <p className="mt-2 text-sm text-muted-foreground">

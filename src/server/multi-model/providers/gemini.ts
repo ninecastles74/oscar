@@ -93,7 +93,7 @@ export async function verifyClaimWithGemini(
     ? `${user}\n\nUse Google Search when the claim needs current public facts. End with a single JSON object only: {"verdict":"supported|disputed|unclear|insufficient_evidence","confidence":0-100,"reasoning":"..."}`
     : user;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: system }] },
@@ -113,7 +113,10 @@ export async function verifyClaimWithGemini(
       url,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
         body: JSON.stringify(body),
       },
       LLM_TIMEOUT_MS,
