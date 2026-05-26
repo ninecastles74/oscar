@@ -5,9 +5,6 @@
   "compatibility_flags": [
     "nodejs_compat_populate_process_env","nodejs_compat"],
   "main": "src/server.ts",
-  "secrets": {
-    "required": ["GEMINI_API_KEY"]
-  },
   "vars": {
     "MULTI_MODEL_VERIFICATION_ENABLED": "true",
     "SCHEDULED_USE_MULTI_MODEL": "true"
