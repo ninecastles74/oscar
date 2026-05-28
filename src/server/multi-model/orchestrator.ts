@@ -1,4 +1,4 @@
-import { isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
+import { hasAnyAiApiKey, isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
 import type {
   AnalysisReport,
   EvidenceItem,
@@ -228,6 +228,8 @@ export async function runMultiModelVerification(
     runtimeEnvKeys: listDetectedAiEnvKeys(),
   };
 
+  const heuristicOnly = !hasAnyAiApiKey();
+
   const geminiNote = isGoogleAiConfigured()
     ? geminiLiveCalls > 0
       ? ` Gemini: ${geminiLiveCalls} live call(s), ${totalSearchQueries} Google Search quer${totalSearchQueries === 1 ? "y" : "ies"}.`
@@ -241,7 +243,7 @@ export async function runMultiModelVerification(
     disagreementCount,
     modelsUsed,
     geminiUsage,
-    summary: `Multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.${geminiNote}`,
+    summary: `${heuristicOnly ? "[Simulated multi-model — no API keys visible on Worker] " : ""}Multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.${geminiNote}`,
     computedAt: new Date().toISOString(),
   };
 }

@@ -4,6 +4,12 @@ import type { AnalysisTrigger } from "./context";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { enrichVerificationWithMultiModel } from "../multi-model";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
+import {
+  captureWorkerEnvSnapshot,
+  hasAnyAiApiKey,
+  listApiKeyEnvNames,
+  mirrorWorkerEnvToProcessEnv,
+} from "../env/server-env";
 import { runVerificationPipeline } from "./verification";
 import {
   computeAndStoreReliabilityScores,
@@ -110,10 +116,17 @@ export async function executeManualAnalysis(
   requestId: string,
   envSnapshot?: Record<string, unknown>,
 ): Promise<void> {
-  if (envSnapshot && Object.keys(envSnapshot).length > 0) {
+  const snap =
+    envSnapshot && Object.keys(envSnapshot).length > 0 ? envSnapshot : captureWorkerEnvSnapshot();
+  if (Object.keys(snap).length > 0) {
     const { setWorkerBindings } = await import("../news/worker-env");
-    setWorkerBindings(envSnapshot);
+    setWorkerBindings(snap);
+    mirrorWorkerEnvToProcessEnv(snap);
   }
+  console.log(
+    "[executeManualAnalysis] API keys visible:",
+    hasAnyAiApiKey(snap) ? listApiKeyEnvNames(snap).join(", ") : "(none)",
+  );
   const request = await loadManualRequest(requestId);
   if (!request?.submission) return;
 

@@ -1,6 +1,5 @@
 /**
- * Resolve Workers secrets — cloudflare:workers env is authoritative (TanStack Start / Workers).
- * Module bindings + process.env are fallbacks (local .dev.vars, mirrored fetch env).
+ * Resolve Workers secrets — cloudflare:workers env + mirrored fetch bindings.
  */
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { getWorkerBindingsRecord } from "../news/worker-env";
@@ -29,12 +28,22 @@ function readFromRecord(record: Record<string, unknown> | null | undefined, key:
   return undefined;
 }
 
+function mergeStringEnvInto(target: Record<string, unknown>, record: Record<string, unknown> | null | undefined) {
+  if (!record) return;
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "string" && value.trim()) {
+      target[key] = value.trim();
+    }
+  }
+}
+
 export function getServerEnv(key: string): string | undefined {
+  const bind = getWorkerBindingsRecord();
+  const fromBindings = readFromRecord(bind, key);
+  if (fromBindings) return fromBindings;
+
   const fromCloudflare = readFromRecord(cloudflareEnv as Record<string, unknown>, key);
   if (fromCloudflare) return fromCloudflare;
-
-  const fromBindings = readFromRecord(getWorkerBindingsRecord(), key);
-  if (fromBindings) return fromBindings;
 
   const fromProcess = process.env[key];
   if (typeof fromProcess === "string" && fromProcess.trim()) return fromProcess.trim();
@@ -51,37 +60,22 @@ export function isServerEnvFalse(key: string): boolean {
 }
 
 export function mirrorWorkerEnvToProcessEnv(env: Record<string, unknown>): void {
-  for (const key of WORKER_SECRET_ENV_KEYS) {
-    const value = env[key];
+  for (const [key, value] of Object.entries(env)) {
     if (typeof value === "string" && value.trim()) {
       process.env[key] = value;
     }
   }
 }
 
-/** Snapshot secrets at request time for waitUntil background work. */
 export function captureWorkerEnvSnapshot(): Record<string, unknown> {
   const snap: Record<string, unknown> = {};
-  const cf = cloudflareEnv as Record<string, unknown>;
-  const bind = getWorkerBindingsRecord() ?? {};
-
-  const keys = new Set<string>([
-    ...WORKER_SECRET_ENV_KEYS,
-    ...Object.keys(cf),
-    ...Object.keys(bind),
-  ]);
-
-  for (const key of keys) {
-    if (!/API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE_AI|MULTI_MODEL|SCHEDULED_USE/i.test(key)) {
-      continue;
-    }
-    const value =
-      readFromRecord(cf, key) ??
-      readFromRecord(bind, key) ??
-      (typeof process.env[key] === "string" ? process.env[key] : undefined);
-    if (value) snap[key] = value;
+  // Bindings from src/server.ts fetch(env) are the most reliable in TanStack Start.
+  mergeStringEnvInto(snap, getWorkerBindingsRecord());
+  mergeStringEnvInto(snap, cloudflareEnv as Record<string, unknown>);
+  for (const key of WORKER_SECRET_ENV_KEYS) {
+    const v = getServerEnv(key);
+    if (v) snap[key] = v;
   }
-
   return snap;
 }
 
@@ -90,11 +84,23 @@ export function listDetectedAiEnvKeys(): string[] {
   for (const key of WORKER_SECRET_ENV_KEYS) {
     if (getServerEnv(key)) found.add(key);
   }
-  const cf = cloudflareEnv as Record<string, unknown>;
-  for (const key of Object.keys(cf)) {
-    if (/API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE_AI/i.test(key)) {
-      if (readFromRecord(cf, key)) found.add(key);
-    }
+  mergeStringEnvInto(
+    Object.fromEntries([...found].map((k) => [k, "x"])),
+    cloudflareEnv as Record<string, unknown>,
+  );
+  const snap = captureWorkerEnvSnapshot();
+  for (const key of Object.keys(snap)) {
+    if (/API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE_AI/i.test(key)) found.add(key);
   }
   return [...found].sort();
+}
+
+export function listApiKeyEnvNames(snapshot?: Record<string, unknown>): string[] {
+  const snap = snapshot ?? captureWorkerEnvSnapshot();
+  return Object.keys(snap).filter((k) => /API_KEY|GEMINI|GOOGLE_AI|OPENAI|ANTHROPIC/i.test(k)).sort();
+}
+
+export function hasAnyAiApiKey(snapshot?: Record<string, unknown>): boolean {
+  const snap = snapshot ?? captureWorkerEnvSnapshot();
+  return listApiKeyEnvNames(snap).length > 0;
 }

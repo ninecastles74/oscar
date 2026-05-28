@@ -46,7 +46,7 @@ export function MultiModelPanel({ verification }: { verification: MultiModelClai
             <span className="text-muted-foreground">
               {PROVIDER_LABELS[v.provider] ?? v.provider} ({v.role})
               {v.skipped && " · skipped"}
-              {v.model.startsWith("heuristic") ? " · offline" : ""}
+              {v.model.startsWith("heuristic") ? " · simulated (no API)" : ""}
             </span>
             <span className="font-medium tabular-nums text-foreground">
               {v.skipped ? "—" : `${v.verdict} ${v.confidence}%`}
@@ -88,7 +88,7 @@ function GeminiUsageBlock({
       <div className="rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
         <div className="flex items-center gap-1.5 font-semibold text-amber-900 dark:text-amber-200">
           <Search className="h-3.5 w-3.5" />
-          Gemini AI — no live API usage
+          Gemini AI — simulated only (no live API)
         </div>
         <p className="mt-1 text-muted-foreground">
           {verdict.skipReason ??

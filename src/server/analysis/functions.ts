@@ -8,7 +8,11 @@ import {
   getManualAnalysisStatus,
 } from "./manual";
 import { runInWorkerBackground } from "../news/worker-env";
-import { captureWorkerEnvSnapshot } from "../env/server-env";
+import {
+  captureWorkerEnvSnapshot,
+  hasAnyAiApiKey,
+  listApiKeyEnvNames,
+} from "../env/server-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -75,10 +79,33 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
   });
 
   const envSnapshot = captureWorkerEnvSnapshot();
+  const apiKeys = listApiKeyEnvNames(envSnapshot);
   console.log(
     "[submitManualAnalysis] env keys detected:",
-    Object.keys(envSnapshot).filter((k) => /API_KEY|GEMINI|GOOGLE_AI/i.test(k)).join(", ") || "(none)",
+    apiKeys.join(", ") || "(none)",
   );
+
+  const quota = await getQuotaStatus(actor);
+
+  // Run in-request when keys exist — waitUntil background often loses Worker secrets.
+  if (hasAnyAiApiKey(envSnapshot)) {
+    try {
+      await executeManualAnalysis(requestId, envSnapshot);
+    } catch (err) {
+      console.error(
+        "[submitManualAnalysis] inline analysis failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    const done = await getManualAnalysisStatus(requestId);
+    return {
+      requestId,
+      submissionId,
+      status: done?.status === "completed" ? ("completed" as const) : ("processing" as const),
+      quota,
+      envKeysDetected: apiKeys,
+    };
+  }
 
   runInWorkerBackground(
     executeManualAnalysis(requestId, envSnapshot).catch((err) => {
@@ -89,13 +116,14 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     }),
   );
 
-  const quota = await getQuotaStatus(actor);
-
   return {
     requestId,
     submissionId,
     status: "processing" as const,
     quota,
+    envKeysDetected: apiKeys,
+    envWarning:
+      "No API keys visible to this Worker. Add GEMINI_API_KEY (Secret) on the oscar worker and redeploy.",
   };
 }
 
