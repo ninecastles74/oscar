@@ -3,9 +3,14 @@ import { env as cloudflareEnv } from "cloudflare:workers";
 import { getServerEnv } from "../../env/server-env";
 
 function openaiKey(): string | undefined {
-  const v = (cloudflareEnv as Record<string, unknown>).OPENAI_API_KEY;
-  if (typeof v === "string" && v.trim()) return v.trim();
-  return getServerEnv("OPENAI_API_KEY");
+  const cf = cloudflareEnv as Record<string, unknown>;
+  for (const name of ["OPENAI_API_KEY", "OPENAI_KEYS"] as const) {
+    const v = cf[name];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    const fromEnv = getServerEnv(name);
+    if (fromEnv) return fromEnv;
+  }
+  return undefined;
 }
 
 import { clampScore } from "../../reliability/utils/math";

@@ -1,7 +1,7 @@
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { getServerEnv, isServerEnvFalse } from "../env/server-env";
 
-const GOOGLE_KEY_NAMES = [
+const GEMINI_KEY_NAMES = [
   "GEMINI_API_KEY",
   "GOOGLE_AI_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -12,14 +12,23 @@ function readCloudflareKey(key: string): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
-/** Resolve Google AI / Gemini API key — cloudflare:workers env first (TanStack Start). */
+function readKey(name: string): string | undefined {
+  return readCloudflareKey(name) ?? getServerEnv(name);
+}
+
+/** Google AI Studio keys usually start with AIza */
+function isLikelyGoogleAiKey(value: string): boolean {
+  return value.startsWith("AIza") && value.length > 20;
+}
+
+/** Resolve Google AI / Gemini API key. */
 export function getGoogleAiApiKey(): string | undefined {
-  for (const name of GOOGLE_KEY_NAMES) {
-    const fromCf = readCloudflareKey(name);
-    if (fromCf) return fromCf;
-    const fromHelper = getServerEnv(name);
-    if (fromHelper) return fromHelper;
+  for (const name of GEMINI_KEY_NAMES) {
+    const v = readKey(name);
+    if (v) return v;
   }
+  const googleApi = readKey("GOOGLE_API_KEY");
+  if (googleApi && isLikelyGoogleAiKey(googleApi)) return googleApi;
   return undefined;
 }
 
@@ -32,9 +41,5 @@ export function isGeminiGoogleSearchEnabled(): boolean {
 }
 
 export function geminiVerificationModel(): string {
-  return (
-    readCloudflareKey("GEMINI_VERIFICATION_MODEL") ||
-    getServerEnv("GEMINI_VERIFICATION_MODEL") ||
-    "gemini-2.0-flash"
-  );
+  return readKey("GEMINI_VERIFICATION_MODEL") ?? getServerEnv("GEMINI_VERIFICATION_MODEL") ?? "gemini-2.0-flash";
 }

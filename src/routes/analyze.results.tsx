@@ -136,9 +136,21 @@ function AnalyzeResultsPage() {
         <div className="mb-4 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           <p className="font-medium">Server AI diagnostics (live)</p>
           <p className="text-muted-foreground">
-            Google key detected: {aiDiag.googleKeyDetected ? "yes" : "no"} · Keys:{" "}
-            {(aiDiag.detectedAiEnvKeys ?? []).join(", ") || "none"}
+            Google key detected: {aiDiag.googleKeyDetected ? "yes" : "no"}
+            {aiDiag.geminiKeyLength ? ` (${aiDiag.geminiKeyLength} chars)` : ""}
+            {" · "}Configured: {(aiDiag.detectedAiEnvKeys ?? []).join(", ") || "none"}
           </p>
+          {"secretBindings" in aiDiag && Array.isArray(aiDiag.secretBindings) && (
+            <ul className="mt-2 text-xs text-muted-foreground list-disc pl-4">
+              {(aiDiag.secretBindings as { key: string; status: string; valueLength?: number }[])
+                .filter((b) => /API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE/i.test(b.key))
+                .map((b) => (
+                  <li key={b.key}>
+                    {b.key}: {b.status === "ok" ? `ok (${b.valueLength ?? "?"} chars)` : b.status}
+                  </li>
+                ))}
+            </ul>
+          )}
           <p className="text-muted-foreground text-xs mt-1">{aiDiag.likelyOfflineReason}</p>
         </div>
       )}

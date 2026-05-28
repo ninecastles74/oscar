@@ -1,34 +1,55 @@
-import { listDetectedAiEnvKeys } from "../env/server-env";
+import { auditSecretBindings, listDetectedAiEnvKeys } from "../env/server-env";
 import { getMultiModelProviderStatus } from "../multi-model/provider-status";
 import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
+import { getServerEnv } from "../env/server-env";
 import { getWorkerBindingsRecord, isFeedKvConfigured } from "../news/worker-env";
 import { isMultiModelEnabled } from "../multi-model/config";
 
 export function getAiAnalysisDiagnostics() {
   const user = getMultiModelProviderStatus("user");
   const scheduled = getMultiModelProviderStatus("scheduled");
-  const detectedKeys = listDetectedAiEnvKeys();
+  const secretAudit = auditSecretBindings();
+  const configuredKeys = listDetectedAiEnvKeys();
   const bindings = getWorkerBindingsRecord();
   const bindingKeyNames = bindings ? Object.keys(bindings).filter((k) => !k.startsWith("__")).sort() : [];
+
+  const emptyBindings = secretAudit.filter((a) => a.status === "empty");
+  const geminiKey = getGoogleAiApiKey();
+
+  let likelyOfflineReason: string;
+  if (geminiKey) {
+    likelyOfflineReason =
+      "Gemini key is configured. If Live Gemini calls = 0, check model name or API errors in Worker logs.";
+  } else if (emptyBindings.length > 0) {
+    likelyOfflineReason =
+      `Secret names exist but values are EMPTY (${emptyBindings.map((a) => a.key).join(", ")}). ` +
+      "In Cloudflare → Workers → oscar → Settings → Secrets: delete and re-add each key with the real API value, then redeploy. " +
+      "Use Secret (encrypted), not an empty Variable. For Gemini use GEMINI_API_KEY or GOOGLE_AI_API_KEY (not GOOGLE_API_KEY unless it is an AIza… key).";
+  } else if (configuredKeys.length === 0) {
+    likelyOfflineReason =
+      "No API secrets on this Worker. Add GEMINI_API_KEY as a Secret on the oscar worker (Production), then redeploy.";
+  } else {
+    likelyOfflineReason =
+      "Some keys are set but not recognized for Gemini. Use GEMINI_API_KEY or GOOGLE_AI_API_KEY (Google AI Studio key, starts with AIza).";
+  }
 
   return {
     user,
     scheduled,
     multiModelWouldRun: { user: isMultiModelEnabled("user"), scheduled: isMultiModelEnabled("scheduled") },
     googleConfigured: isGoogleAiConfigured(),
-    googleKeyDetected: !!getGoogleAiApiKey(),
-    detectedAiEnvKeys: detectedKeys,
+    googleKeyDetected: !!geminiKey,
+    geminiKeyLength: geminiKey?.length,
+    detectedAiEnvKeys: configuredKeys,
+    secretBindings: secretAudit,
+    openaiConfigured: !!(getServerEnv("OPENAI_API_KEY") || getServerEnv("OPENAI_KEYS")),
+    anthropicConfigured: !!getServerEnv("ANTHROPIC_API_KEY"),
     workerBindingKeyNames: bindingKeyNames,
     feedKvConfigured: isFeedKvConfigured(),
     pipelineNotes: [
-      "Claim extraction and story consensus never call paid LLM APIs.",
-      "Ask Oscar always runs multi-model verification; live calls require keys on the Worker.",
+      "Live research uses GEMINI_API_KEY + Google Search when configured with a non-empty value.",
+      "Empty secret names in the dashboard do not count as configured.",
     ],
-    likelyOfflineReason:
-      detectedKeys.length === 0
-        ? "Worker runtime sees no API keys — add GEMINI_API_KEY as Secret on the oscar Worker and redeploy."
-        : !user.googleConfigured
-          ? "Keys not mapped to GOOGLE_AI_API_KEY / GEMINI_API_KEY names."
-          : "Keys visible; if Live Gemini calls = 0, check Worker logs for [gemini] API errors.",
+    likelyOfflineReason,
   };
 }
