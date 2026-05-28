@@ -173,7 +173,7 @@ async function mapWithConcurrency<T, R>(
 
 function countLiveEvidenceClaims(results: VerificationPipelineResults): number {
   return Object.values(results.evidenceByClaimId).filter((items) =>
-    items?.some((e) => e.id.includes("-live-e")),
+    items?.some((e) => e?.id?.includes("-live-e")),
   ).length;
 }
 
@@ -215,7 +215,7 @@ export async function runMultiModelVerification(
   let claimsWithGoogleSearch = 0;
   let totalSearchQueries = 0;
   let totalGeminiTokens = 0;
-  let geminiAttempts = verifications.filter((v) => v.stages.includes("gemini_corroboration")).length;
+  let geminiAttempts = verifications.filter((v) => (v.stagesRun ?? []).includes("gemini_corroboration")).length;
   for (const v of verifications) {
     const gem = v.consensus.modelVerdicts.find((m) => m.provider === "google");
     if (gem?.geminiMeta?.liveApiCalled) geminiLiveCalls += 1;
