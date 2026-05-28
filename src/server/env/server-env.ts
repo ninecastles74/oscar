@@ -1,5 +1,6 @@
 /**
  * Resolve Workers secrets — cloudflare:workers env + mirrored fetch bindings.
+ * Normalizes malformed binding names (e.g. "GEMINI_API_KEY=" → "GEMINI_API_KEY").
  */
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { getWorkerBindingsRecord } from "../news/worker-env";
@@ -28,36 +29,53 @@ export type SecretBindingStatus = "ok" | "empty" | "missing";
 export interface SecretBindingAudit {
   key: string;
   status: SecretBindingStatus;
-  /** Length of secret value (never the value itself). */
   valueLength?: number;
+  /** Raw binding name when it differs from normalized key (e.g. trailing "="). */
+  rawKey?: string;
 }
 
-function readFromRecord(record: Record<string, unknown> | null | undefined, key: string): string | undefined {
-  if (!record) return undefined;
-  const value = record[key];
-  if (typeof value === "string" && value.trim()) return value.trim();
-  return undefined;
+/** Strip whitespace and trailing "=" from secret/variable names. */
+export function normalizeEnvKey(key: string): string {
+  return key.trim().replace(/=+$/, "");
+}
+
+function readRawFromRecord(
+  record: Record<string, unknown> | null | undefined,
+  key: string,
+): { value?: string; rawKey?: string } {
+  if (!record) return {};
+  const target = normalizeEnvKey(key);
+  for (const [rawKey, rawValue] of Object.entries(record)) {
+    if (normalizeEnvKey(rawKey) !== target) continue;
+    if (typeof rawValue === "string" && rawValue.trim()) {
+      return { value: rawValue.trim(), rawKey: rawKey !== target ? rawKey : undefined };
+    }
+  }
+  return {};
 }
 
 function mergeStringEnvInto(target: Record<string, unknown>, record: Record<string, unknown> | null | undefined) {
   if (!record) return;
-  for (const [key, value] of Object.entries(record)) {
-    if (typeof value === "string" && value.trim()) {
-      target[key] = value.trim();
-    }
+  for (const [rawKey, value] of Object.entries(record)) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    const key = normalizeEnvKey(rawKey);
+    if (!target[key]) target[key] = value.trim();
   }
 }
 
 export function getServerEnv(key: string): string | undefined {
-  const fromCloudflare = readFromRecord(cloudflareEnv as Record<string, unknown>, key);
-  if (fromCloudflare) return fromCloudflare;
+  const target = normalizeEnvKey(key);
 
-  const bind = getWorkerBindingsRecord();
-  const fromBindings = readFromRecord(bind, key);
-  if (fromBindings) return fromBindings;
+  const fromCloudflare = readRawFromRecord(cloudflareEnv as Record<string, unknown>, target);
+  if (fromCloudflare.value) return fromCloudflare.value;
 
-  const fromProcess = process.env[key];
-  if (typeof fromProcess === "string" && fromProcess.trim()) return fromProcess.trim();
+  const fromBindings = readRawFromRecord(getWorkerBindingsRecord(), target);
+  if (fromBindings.value) return fromBindings.value;
+
+  for (const [rawKey, rawValue] of Object.entries(process.env)) {
+    if (normalizeEnvKey(rawKey) !== target) continue;
+    if (typeof rawValue === "string" && rawValue.trim()) return rawValue.trim();
+  }
 
   return undefined;
 }
@@ -71,50 +89,54 @@ export function isServerEnvFalse(key: string): boolean {
 }
 
 export function mirrorWorkerEnvToProcessEnv(env: Record<string, unknown>): void {
-  for (const [key, value] of Object.entries(env)) {
-    if (typeof value === "string" && value.trim()) {
-      process.env[key] = value;
-    }
+  for (const [rawKey, value] of Object.entries(env)) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    process.env[normalizeEnvKey(rawKey)] = value.trim();
   }
 }
 
-/** Keys present on the binding object (including empty-string placeholders). */
 export function auditSecretBindings(): SecretBindingAudit[] {
   const cf = cloudflareEnv as Record<string, unknown>;
   const bind = getWorkerBindingsRecord() ?? {};
-  const names = new Set<string>([
-    ...WORKER_SECRET_ENV_KEYS,
-    ...Object.keys(cf),
-    ...Object.keys(bind),
-  ]);
+  const byCanonical = new Map<string, SecretBindingAudit>();
 
-  const audits: SecretBindingAudit[] = [];
-  for (const key of names) {
-    if (!/API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE_AI|GOOGLE_API/i.test(key)) continue;
+  const consider = (rawKey: string, record: Record<string, unknown>) => {
+    if (!/API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE_AI|GOOGLE_API/i.test(rawKey)) return;
+    const canonical = normalizeEnvKey(rawKey);
+    const rawValue = record[rawKey];
+    const hasValue = typeof rawValue === "string" && rawValue.trim().length > 0;
+    const existing = byCanonical.get(canonical);
 
-    const rawCf = cf[key];
-    const rawBind = bind[key];
-    const resolved = readFromRecord(cf, key) ?? readFromRecord(bind, key);
-
-    const hasEmptyPlaceholder =
-      (typeof rawCf === "string" && !rawCf.trim()) ||
-      (typeof rawBind === "string" && !rawBind.trim());
-
-    if (resolved) {
-      audits.push({ key, status: "ok", valueLength: resolved.length });
-    } else if (hasEmptyPlaceholder || key in cf || key in bind) {
-      audits.push({ key, status: "empty" });
+    if (hasValue) {
+      const entry: SecretBindingAudit = {
+        key: canonical,
+        status: "ok",
+        valueLength: (rawValue as string).trim().length,
+        rawKey: rawKey !== canonical ? rawKey : undefined,
+      };
+      if (!existing || existing.status !== "ok") byCanonical.set(canonical, entry);
+      return;
     }
-  }
 
-  const seen = new Set(audits.map((a) => a.key));
+    if (!existing) {
+      byCanonical.set(canonical, {
+        key: canonical,
+        status: rawKey in record ? "empty" : "missing",
+        rawKey: rawKey !== canonical ? rawKey : undefined,
+      });
+    }
+  };
+
+  for (const key of Object.keys(cf)) consider(key, cf);
+  for (const key of Object.keys(bind)) consider(key, bind);
+
   for (const key of ["GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const) {
-    if (!seen.has(key) && !getServerEnv(key)) {
-      audits.push({ key, status: "missing" });
-    }
+    if (byCanonical.has(key)) continue;
+    const v = getServerEnv(key);
+    byCanonical.set(key, v ? { key, status: "ok", valueLength: v.length } : { key, status: "missing" });
   }
 
-  return audits.sort((a, b) => a.key.localeCompare(b.key));
+  return [...byCanonical.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export function captureWorkerEnvSnapshot(): Record<string, unknown> {
@@ -130,8 +152,14 @@ export function captureWorkerEnvSnapshot(): Record<string, unknown> {
 
 export function listDetectedAiEnvKeys(): string[] {
   return auditSecretBindings()
-    .filter((a) => a.status === "ok")
+    .filter((a) => a.status === "ok" && /API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE/i.test(a.key))
     .map((a) => a.key);
+}
+
+export function listMalformedEnvKeyAliases(): string[] {
+  return auditSecretBindings()
+    .filter((a) => a.rawKey)
+    .map((a) => a.rawKey as string);
 }
 
 export function listApiKeyEnvNames(snapshot?: Record<string, unknown>): string[] {
@@ -143,12 +171,19 @@ export function listApiKeyEnvNames(snapshot?: Record<string, unknown>): string[]
         v.trim().length > 0 &&
         /API_KEY|GEMINI|GOOGLE_AI|GOOGLE_API|OPENAI|ANTHROPIC/i.test(k),
     )
-    .map(([k]) => k)
+    .map(([k]) => normalizeEnvKey(k))
     .sort();
 }
 
 export function hasAnyAiApiKey(snapshot?: Record<string, unknown>): boolean {
-  const aiKeys = ["GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "OPENAI_API_KEY", "OPENAI_KEYS", "ANTHROPIC_API_KEY"];
+  const aiKeys = [
+    "GEMINI_API_KEY",
+    "GOOGLE_AI_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_KEYS",
+    "ANTHROPIC_API_KEY",
+  ];
   const snap = snapshot ?? captureWorkerEnvSnapshot();
   return aiKeys.some((k) => typeof snap[k] === "string" && String(snap[k]).trim().length > 8);
 }

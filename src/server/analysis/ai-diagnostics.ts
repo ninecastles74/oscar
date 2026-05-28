@@ -1,4 +1,4 @@
-import { auditSecretBindings, listDetectedAiEnvKeys } from "../env/server-env";
+import { auditSecretBindings, listDetectedAiEnvKeys, listMalformedEnvKeyAliases } from "../env/server-env";
 import { getMultiModelProviderStatus } from "../multi-model/provider-status";
 import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
 import { getServerEnv } from "../env/server-env";
@@ -10,6 +10,7 @@ export function getAiAnalysisDiagnostics() {
   const scheduled = getMultiModelProviderStatus("scheduled");
   const secretAudit = auditSecretBindings();
   const configuredKeys = listDetectedAiEnvKeys();
+  const malformedKeyAliases = listMalformedEnvKeyAliases();
   const bindings = getWorkerBindingsRecord();
   const bindingKeyNames = bindings ? Object.keys(bindings).filter((k) => !k.startsWith("__")).sort() : [];
 
@@ -28,6 +29,9 @@ export function getAiAnalysisDiagnostics() {
   } else if (configuredKeys.length === 0) {
     likelyOfflineReason =
       "No API secrets on this Worker. Add GEMINI_API_KEY as a Secret on the oscar worker (Production), then redeploy.";
+  } else if (malformedKeyAliases.length > 0) {
+    likelyOfflineReason =
+      `Bindings use malformed names (${malformedKeyAliases.join(", ")}). Values are read via normalized names; rename secrets in Cloudflare to GEMINI_API_KEY (no trailing "=").`;
   } else {
     likelyOfflineReason =
       "Some keys are set but not recognized for Gemini. Use GEMINI_API_KEY or GOOGLE_AI_API_KEY (Google AI Studio key, starts with AIza).";
@@ -41,6 +45,7 @@ export function getAiAnalysisDiagnostics() {
     googleKeyDetected: !!geminiKey,
     geminiKeyLength: geminiKey?.length,
     detectedAiEnvKeys: configuredKeys,
+    malformedKeyAliases,
     secretBindings: secretAudit,
     openaiConfigured: !!(getServerEnv("OPENAI_API_KEY") || getServerEnv("OPENAI_KEYS")),
     anthropicConfigured: !!getServerEnv("ANTHROPIC_API_KEY"),
