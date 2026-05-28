@@ -1,29 +1,34 @@
 import type { EvidenceItem } from "@/types/news-platform";
 import { geminiGenerateContent, groundingToSourceList } from "../../ai/gemini-client";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
+import { getServerEnv } from "../../env/server-env";
 import type { ClassifiedClaim } from "./types";
 
-const MAX_CLAIMS = Number(process.env.LIVE_EVIDENCE_MAX_CLAIMS) || 4;
+/** Max claims researched in one batched Gemini + Search call (saves free-tier quota). */
+const MAX_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
 
-interface EvidencePayload {
-  evidence?: Array<{
-    sourceName: string;
-    url?: string;
-    excerpt: string;
-    stance?: "support" | "contradict" | "neutral";
+interface BatchedEvidencePayload {
+  claims?: Array<{
+    claimId: string;
+    evidence?: Array<{
+      sourceName: string;
+      url?: string;
+      excerpt: string;
+      stance?: "support" | "contradict" | "neutral";
+    }>;
   }>;
 }
 
-function parseEvidenceJson(raw: string): EvidencePayload["evidence"] | null {
+function parseBatchedEvidence(raw: string): BatchedEvidencePayload["claims"] | null {
   try {
-    const p = JSON.parse(raw) as EvidencePayload;
-    return p.evidence?.filter((e) => e.excerpt?.trim()) ?? null;
+    const p = JSON.parse(raw) as BatchedEvidencePayload;
+    return p.claims?.filter((c) => c.claimId && c.evidence?.length) ?? null;
   } catch {
-    const m = raw.match(/\{[\s\S]*"evidence"[\s\S]*\}/);
+    const m = raw.match(/\{[\s\S]*"claims"[\s\S]*\}/);
     if (!m) return null;
     try {
-      const p = JSON.parse(m[0]) as EvidencePayload;
-      return p.evidence?.filter((e) => e.excerpt?.trim()) ?? null;
+      const p = JSON.parse(m[0]) as BatchedEvidencePayload;
+      return p.claims?.filter((c) => c.claimId && c.evidence?.length) ?? null;
     } catch {
       return null;
     }
@@ -51,70 +56,75 @@ function makeItem(
   };
 }
 
+function evidenceFromParsed(
+  claimId: string,
+  parsed: NonNullable<BatchedEvidencePayload["claims"]>[number]["evidence"],
+): EvidenceItem[] {
+  const items: EvidenceItem[] = [];
+  parsed?.slice(0, 4).forEach((e, i) => {
+    const stance = e.stance === "contradict" || e.stance === "neutral" ? e.stance : "support";
+    items.push(
+      makeItem(claimId, i, e.sourceName || "Web source", e.excerpt, e.url ?? "", stance),
+    );
+  });
+  return items;
+}
+
 /**
- * Live web research per claim using Gemini + Google Search (real API usage).
+ * Live web research — one batched Gemini + Google Search call for all claims (quota-friendly).
  */
 export async function retrieveEvidenceLive(
   claims: ClassifiedClaim[],
 ): Promise<Record<string, EvidenceItem[]>> {
   if (!isGoogleAiConfigured()) return {};
 
-  const out: Record<string, EvidenceItem[]> = {};
   const batch = claims.slice(0, MAX_CLAIMS);
+  if (batch.length === 0) return {};
 
-  for (const claim of batch) {
-    const result = await geminiGenerateContent({
-      useGoogleSearch: true,
-      system:
-        "You are a news fact-check researcher. Use Google Search to find real, current sources. Return JSON only.",
-      user: `Claim to research: "${claim.text}"
+  const claimLines = batch.map((c) => `- claimId="${c.id}": "${c.text}"`).join("\n");
 
-Use Google Search. Return JSON:
-{"evidence":[{"sourceName":"Outlet name","url":"https://...","excerpt":"Relevant quote or summary (max 200 chars)","stance":"support"|"contradict"|"neutral"}]}
+  const result = await geminiGenerateContent({
+    useGoogleSearch: true,
+    system:
+      "You are a news fact-check researcher. Use Google Search once to research all claims. Return JSON only.",
+    user: `Research ALL of these claims using Google Search. Return JSON:
+{"claims":[{"claimId":"...","evidence":[{"sourceName":"Outlet","url":"https://...","excerpt":"max 200 chars","stance":"support"|"contradict"|"neutral"}]}]}
 
-Include 2-4 items from distinct sources when possible.`,
-    });
+Claims:
+${claimLines}
 
-    if (!result) continue;
+Include 2-3 evidence items per claim from distinct sources when possible.`,
+  });
 
-    const parsed = parseEvidenceJson(result.text);
-    const items: EvidenceItem[] = [];
+  const out: Record<string, EvidenceItem[]> = {};
 
+  if (result) {
+    const parsed = parseBatchedEvidence(result.text);
     if (parsed?.length) {
-      parsed.slice(0, 4).forEach((e, i) => {
-        const stance = e.stance === "contradict" || e.stance === "neutral" ? e.stance : "support";
-        items.push(
-          makeItem(
-            claim.id,
-            i,
-            e.sourceName || "Web source",
-            e.excerpt,
-            e.url ?? "",
-            stance,
-          ),
-        );
-      });
+      for (const row of parsed) {
+        const items = evidenceFromParsed(row.claimId, row.evidence);
+        if (items.length > 0) {
+          out[row.claimId] = items;
+          console.log(`[retrieveEvidenceLive] ${row.claimId}: ${items.length} live source(s)`);
+        }
+      }
     }
 
     const grounded = groundingToSourceList(result.grounding);
-    for (let i = 0; i < grounded.length && items.length < 5; i++) {
-      const g = grounded[i]!;
-      if (items.some((x) => x.url === g.uri)) continue;
-      items.push(
+    for (const claim of batch) {
+      if (out[claim.id]?.length) continue;
+      if (grounded.length === 0) continue;
+      const g = grounded[0]!;
+      out[claim.id] = [
         makeItem(
           claim.id,
-          items.length,
+          0,
           g.title ?? "Web source",
-          `Source located via Google Search for this claim.`,
+          "Source located via Google Search for this claim.",
           g.uri ?? "",
           "neutral",
         ),
-      );
-    }
-
-    if (items.length > 0) {
-      out[claim.id] = items;
-      console.log(`[retrieveEvidenceLive] ${claim.id}: ${items.length} live source(s)`);
+      ];
     }
   }
 

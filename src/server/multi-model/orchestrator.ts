@@ -165,7 +165,7 @@ export async function arbitrateSingleClaim(
 }
 
 const MANUAL_MAX_CLAIMS = Number(process.env.MANUAL_MULTIMODEL_MAX_CLAIMS) || 5;
-const MANUAL_CONCURRENCY = Number(process.env.MANUAL_MULTIMODEL_CONCURRENCY) || 3;
+const MANUAL_CONCURRENCY = Number(process.env.MANUAL_MULTIMODEL_CONCURRENCY) || 1;
 
 async function mapWithConcurrency<T, R>(
   items: T[],

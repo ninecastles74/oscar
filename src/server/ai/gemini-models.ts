@@ -1,18 +1,13 @@
 import { getServerEnv } from "../env/server-env";
 
-/** Default for verification + Google Search grounding (Google AI Studio). */
-export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
+/** Default — lite uses separate free-tier pool on many accounts. */
+export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
 
-/**
- * Ordered fallbacks — avoid deprecated/shutdown IDs (e.g. gemini-1.5-flash).
- * See https://ai.google.dev/gemini-api/docs/models
- */
 export const GEMINI_MODEL_FALLBACKS = [
-  "gemini-3.5-flash",
-  "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-3.5-flash",
   "gemini-2.0-flash-001",
-  "gemini-2.0-flash",
 ] as const;
 
 export function resolveGeminiVerificationModel(): string {
