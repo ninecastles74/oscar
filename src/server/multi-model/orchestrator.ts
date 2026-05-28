@@ -105,7 +105,6 @@ async function verifyOneClaim(
   let corroboration: ModelClaimVerdict | null = null;
   if (isGeminiLiveEnabled()) {
     stages.push("gemini_corroboration");
-    geminiAttempts += 1;
     corroboration = await verifyClaimWithGemini({
       claimId: claim.id,
       claimText: claim.text,
