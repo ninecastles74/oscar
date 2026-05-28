@@ -25,7 +25,7 @@ import { ScoreExplainabilitySheet } from "@/features/explainability/score-explai
 import { useState } from "react";
 import type { ScoreExplainability } from "@/types/news-platform";
 import { OSCAR } from "@/lib/brand";
-import { isLiveAnalysisReport } from "@/server/analysis/live-ai-guard";
+import { isLiveAnalysisReport } from "@/lib/live-analysis";
 import { cn } from "@/lib/utils";
 
 export function ReportView({
