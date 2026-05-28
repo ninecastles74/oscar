@@ -200,22 +200,41 @@ export function ReportView({
         </div>
       </div>
 
-      {platformReport?.multiModelVerification &&
-          platformReport.multiModelVerification.geminiUsage?.configured &&
-          (platformReport.multiModelVerification.geminiUsage?.liveApiCalls ?? 0) === 0 && (
-            <div className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
-              <strong>No live AI API calls were made.</strong> Oscar ran offline heuristics only. Add{" "}
-              <code className="text-xs">GEMINI_API_KEY</code> (or <code className="text-xs">GOOGLE_AI_API_KEY</code>)
-              as a Cloudflare Workers <em>Secret</em> on the <code className="text-xs">oscar</code> worker, redeploy,
-              then run a new analysis.
-            </div>
-          )}
-        {platformReport?.multiModelVerification?.geminiUsage?.liveApiCalls === 0 && (
-            <div className="mb-4 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm">
-              Evidence may be from the built-in source index only. With <code className="text-xs">GEMINI_API_KEY</code> set,
-              new analyses use Gemini Google Search for live research before consensus.
-            </div>
-          )}
+      {(() => {
+        const gu = platformReport?.multiModelVerification?.geminiUsage as
+          | {
+              configured?: boolean;
+              liveApiCalls?: number;
+              liveApiAttempts?: number;
+              lastApiError?: string;
+              liveEvidenceClaims?: number;
+            }
+          | undefined;
+        const configured = gu?.configured;
+        const liveCalls = gu?.liveApiCalls ?? 0;
+        const attempts = gu?.liveApiAttempts ?? 0;
+        const lastErr = gu?.lastApiError;
+        const liveEvidence = gu?.liveEvidenceClaims ?? 0;
+        if (!configured) {
+          return (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+              No Gemini key on this Worker. Add <code className="text-xs">GEMINI_API_KEY</code> as a
+              Cloudflare Secret on <strong>oscar</strong>, redeploy, then run a new analysis.
+            </p>
+          );
+        }
+        if (liveCalls === 0 && liveEvidence === 0) {
+          return (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+              Gemini is configured but this run made no successful live API calls
+              {attempts > 0 ? ` (${attempts} attempt(s))` : ""}.
+              {lastErr ? ` Last error: ${lastErr}.` : " Check Worker logs for model or quota errors."}{" "}
+              Run a <strong>new</strong> analysis after redeploying latest code.
+            </p>
+          );
+        }
+        return null;
+      })()}
         {platformReport?.multiModelVerification && (
         <div className="mt-8 rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Multi-model AI (OpenAI · Claude · Gemini)</h2>
