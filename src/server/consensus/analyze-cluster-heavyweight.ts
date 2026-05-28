@@ -15,6 +15,7 @@ import {
 import type { PipelineArticleContext } from "../analysis/types";
 import { buildStoryConsensus } from "./build-consensus";
 import { enrichStoryConsensusWithGemini } from "./enrich-story-consensus-ai";
+import { assertLiveAnalysisReport } from "../analysis/live-ai-guard";
 import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import type { AnalyzedArticleBundle, StoryConsensusInput } from "./types";
 
@@ -63,6 +64,7 @@ export async function analyzeArticleHeavyweight(
   const ctx = articleToPipeline(article);
   let bundle = await runVerificationPipeline(ctx);
   bundle = await enrichVerificationWithMultiModel(bundle, "scheduled");
+  assertLiveAnalysisReport(bundle.report, bundle.stages);
   const { report, results } = bundle;
 
   const reliability = computeAndStoreReliabilityScores({

@@ -14,6 +14,7 @@ import {
   listApiKeyEnvNames,
 } from "../env/server-env";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
+import { isGoogleAiConfigured } from "../ai/google-api-key";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -81,6 +82,17 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
   });
 
   ensureWorkerEnvFromPlatform();
+
+  if (!isGoogleAiConfigured()) {
+    return {
+      error: {
+        code: "LIVE_AI_REQUIRED",
+        message:
+          "Live analysis requires GEMINI_API_KEY on the oscar Worker. Mock and offline reports are disabled.",
+        statusCode: 503,
+      },
+    };
+  }
   const envSnapshot = captureWorkerEnvSnapshot();
   const apiKeys = listApiKeyEnvNames(envSnapshot);
   console.log(

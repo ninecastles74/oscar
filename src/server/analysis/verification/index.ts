@@ -3,37 +3,46 @@ import { classifyClaims } from "./classifyClaims";
 import { classifyTopics } from "../topics/classify-topics";
 import { compareSources } from "./compareSources";
 import { runContradictionAnalysisBatch } from "../../contradiction";
-import { extractClaims } from "./extractClaims";
 import { extractClaimsWithLlm } from "./extractClaimsLlm";
 import { generateFinalReport } from "./generateFinalReport";
-import { retrieveEvidence } from "./retrieveEvidence";
 import { retrieveEvidenceLive } from "./retrieveEvidenceLive";
 import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
-import { isServerEnvTruthy } from "../../env/server-env";
+import { getLastGeminiError } from "../../ai/gemini-client";
+import { AnalysisError } from "../errors";
 
 export { VERDICT_LABELS } from "./types";
 export type { VerificationPipelineResults, VerificationReportBundle } from "./types";
 
 /**
- * Full verification pipeline — uses LLM claim/topic steps when API keys are configured.
+ * Live-only verification pipeline — no mock evidence or heuristic claim extraction.
  */
 export async function runVerificationPipeline(
   article: PipelineArticleContext,
 ): Promise<VerificationReportBundle> {
+  if (!isGoogleAiConfigured()) {
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      "GEMINI_API_KEY is required for live analysis and web research.",
+      503,
+    );
+  }
+
   const startedAt = Date.now();
   const stages: string[] = [];
 
   stages.push("extractClaims");
-  let raw = await extractClaimsWithLlm(article.analysisText, article.submissionId);
-  if (raw?.length) {
-    stages.push("extractClaimsLlm");
-  } else {
-    raw = extractClaims(article.analysisText, article.submissionId);
-    stages.push("extractClaimsHeuristic");
+  const raw = await extractClaimsWithLlm(article.analysisText, article.submissionId);
+  if (!raw?.length) {
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      "Could not extract claims with live AI (OpenAI or Gemini). Check API keys and redeploy.",
+      503,
+    );
   }
+  stages.push("extractClaimsLlm");
 
   stages.push("classifyClaims");
   const classified = classifyClaims(raw);
@@ -53,19 +62,19 @@ export async function runVerificationPipeline(
   }));
 
   stages.push("retrieveEvidence");
-  let evidenceByClaimId = await retrieveEvidenceLive(classifiedWithTopics);
-  if (Object.keys(evidenceByClaimId).length > 0) {
-    stages.push("retrieveEvidenceLive");
-    for (const c of classifiedWithTopics) {
-      if (!evidenceByClaimId[c.id]?.length) {
-        const mock = retrieveEvidence([c]);
-        evidenceByClaimId[c.id] = mock[c.id] ?? [];
-      }
-    }
-  } else {
-    evidenceByClaimId = retrieveEvidence(classifiedWithTopics);
-    stages.push("retrieveEvidenceMock");
+  const evidenceByClaimId = await retrieveEvidenceLive(classifiedWithTopics);
+  const missingLive = classifiedWithTopics.filter((c) => !evidenceByClaimId[c.id]?.length);
+  if (missingLive.length > 0) {
+    const hint = getLastGeminiError();
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s).${
+        hint ? ` ${hint}` : ""
+      }`,
+      503,
+    );
   }
+  stages.push("retrieveEvidenceLive");
 
   stages.push("compareSources");
   const comparisons = compareSources(classifiedWithTopics, evidenceByClaimId);

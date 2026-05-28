@@ -1,6 +1,6 @@
 import type { ModelProviderId, Verdict } from "@/types/news-platform";
 import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
-import { getServerEnv, isOpenAiConfigured, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
+import { getServerEnv, hasAnyAiApiKey, isOpenAiConfigured, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
 
 export const MODEL_WEIGHTS = {
   primary: 0.45,
@@ -20,7 +20,9 @@ export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): 
     return false;
   }
   // User + scheduled feed analysis always run multi-model when not explicitly disabled.
-  if (forTrigger === "user" || forTrigger === "scheduled") return true;
+  if (forTrigger === "user" || forTrigger === "scheduled") {
+    return hasAnyAiApiKey() && isGoogleAiConfigured();
+  }
   return (
     isOpenAiConfigured() ||
     isServerEnvTruthy("ANTHROPIC_API_KEY") ||

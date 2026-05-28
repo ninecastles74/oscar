@@ -1,6 +1,7 @@
 import type { StoryConsensusReport } from "@/types/news-platform";
-import { geminiGenerateContent } from "../ai/gemini-client";
+import { geminiGenerateContent, getLastGeminiError } from "../ai/gemini-client";
 import { isGoogleAiConfigured } from "../ai/google-api-key";
+import { AnalysisError } from "../analysis/errors";
 import type { StoryConsensusInput } from "./types";
 
 /**
@@ -10,7 +11,13 @@ export async function enrichStoryConsensusWithGemini(
   report: StoryConsensusReport,
   input: StoryConsensusInput,
 ): Promise<StoryConsensusReport> {
-  if (!isGoogleAiConfigured()) return report;
+  if (!isGoogleAiConfigured()) {
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      "Story consensus requires GEMINI_API_KEY for live cross-source research.",
+      503,
+    );
+  }
 
   const claimLines = input.articles
     .flatMap((a) => a.report.claims.slice(0, 4))
@@ -38,7 +45,14 @@ Scores: consensus ${report.consensusScore}, dispute ${report.disputeScore}, unce
 Write a 3-5 sentence executive summary of cross-source agreement, disputes, and what a reader should believe. Be specific.`,
   });
 
-  if (!result?.text) return report;
+  if (!result?.text) {
+    const err = getLastGeminiError();
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      err ? `Story consensus Gemini failed: ${err}` : "Story consensus Gemini failed.",
+      503,
+    );
+  }
 
   return {
     ...report,

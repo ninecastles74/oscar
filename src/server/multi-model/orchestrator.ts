@@ -1,5 +1,11 @@
 import { getLastGeminiError } from "../ai/gemini-client";
-import { hasAnyAiApiKey, isOpenAiConfigured, isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
+import { AnalysisError } from "../analysis/errors";
+import {
+  hasAnyAiApiKey,
+  isOpenAiConfigured,
+  isServerEnvTruthy,
+  listDetectedAiEnvKeys,
+} from "../env/server-env";
 import type {
   AnalysisReport,
   EvidenceItem,
@@ -16,16 +22,15 @@ import {
 import { isGeminiGoogleSearchEnabled, isGoogleAiConfigured } from "../ai/google-api-key";
 import { buildMultiModelConsensus, toClaimVerification } from "./consensus";
 import { providersInvolved } from "./disagreement";
-import {
-  heuristicCorroborationVerdict,
-  heuristicPrimaryVerdict,
-  heuristicReviewVerdict,
-} from "./heuristic-fallback";
 import { verifyClaimWithAnthropic } from "./providers/anthropic";
 import { verifyClaimWithGemini } from "./providers/gemini";
 import { verifyClaimWithOpenAI } from "./providers/openai";
 import type { ModelClaimVerdict } from "@/types/news-platform";
 import { clampScore } from "../reliability/utils/math";
+
+function liveAiError(message: string): never {
+  throw new AnalysisError("LIVE_AI_REQUIRED", message, 503);
+}
 
 function needsClaudeReview(primary: ModelClaimVerdict, pipeline: { verdict: string; confidence: number }): boolean {
   return (
@@ -61,15 +66,22 @@ async function verifyOneClaim(
       evidence: evidencePayload,
       role: "primary",
     });
-  }
-  if (!primary) {
-    stages.push("heuristic_primary");
-    primary = heuristicPrimaryVerdict(
-      claim.text,
-      evidence,
-      pipelineFallback.verdict,
-      pipelineFallback.confidence,
-    );
+    if (!primary) {
+      liveAiError(`OpenAI primary verification failed for claim "${claim.text.slice(0, 80)}…"`);
+    }
+  } else if (isGeminiLiveEnabled()) {
+    stages.push("gemini_primary");
+    primary = await verifyClaimWithGemini({
+      claimId: claim.id,
+      claimText: claim.text,
+      evidence: evidencePayload,
+      role: "primary",
+    });
+    if (!primary) {
+      liveAiError(`Gemini primary verification failed for claim "${claim.text.slice(0, 80)}…"`);
+    }
+  } else {
+    liveAiError("Configure OPENAI_API_KEY or GEMINI_API_KEY for live multi-model verification.");
   }
 
   let review: ModelClaimVerdict | null = null;
@@ -84,10 +96,23 @@ async function verifyOneClaim(
         role: "review",
         priorVerdict: primary,
       });
-    }
-    if (!review) {
-      stages.push("heuristic_review");
-      review = heuristicReviewVerdict(primary, contradiction);
+      if (!review) {
+        liveAiError(`Anthropic review failed for claim "${claim.text.slice(0, 80)}…"`);
+      }
+    } else if (isGeminiLiveEnabled()) {
+      stages.push("gemini_review");
+      review = await verifyClaimWithGemini({
+        claimId: claim.id,
+        claimText: claim.text,
+        evidence: evidencePayload,
+        role: "review",
+        priorVerdict: primary,
+      });
+      if (!review) {
+        liveAiError(`Gemini review failed for claim "${claim.text.slice(0, 80)}…"`);
+      }
+    } else {
+      liveAiError("Uncertain claim requires Anthropic or Gemini for live review.");
     }
   } else {
     review = {
@@ -102,26 +127,23 @@ async function verifyOneClaim(
     };
   }
 
-  let corroboration: ModelClaimVerdict | null = null;
-  if (isGeminiLiveEnabled()) {
-    stages.push("gemini_corroboration");
-    corroboration = await verifyClaimWithGemini({
-      claimId: claim.id,
-      claimText: claim.text,
-      evidence: evidencePayload,
-      role: "corroboration",
-      priorVerdict: review.skipped ? primary : review,
-    });
+  if (!isGeminiLiveEnabled()) {
+    liveAiError("GEMINI_API_KEY is required for live corroboration with Google Search.");
   }
-  if (!corroboration) {
-    stages.push("heuristic_corroboration");
-    const heuristic = heuristicCorroborationVerdict(evidence, review.skipped ? primary : review);
-    corroboration = {
-      ...heuristic,
-      skipReason: isGeminiLiveEnabled()
-        ? "Gemini API unavailable or returned no verdict — heuristic corroboration used."
-        : "GOOGLE_AI_API_KEY / GEMINI_API_KEY not configured — heuristic corroboration only.",
-    };
+
+  stages.push("gemini_corroboration");
+  const corroboration = await verifyClaimWithGemini({
+    claimId: claim.id,
+    claimText: claim.text,
+    evidence: evidencePayload,
+    role: "corroboration",
+    priorVerdict: review.skipped ? primary : review,
+  });
+  if (!corroboration?.geminiMeta?.liveApiCalled) {
+    const err = getLastGeminiError();
+    liveAiError(
+      `Gemini corroboration failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
+    );
   }
 
   const modelVerdicts = [primary, review, corroboration];
@@ -134,7 +156,6 @@ async function verifyOneClaim(
   };
 }
 
-/** Single-claim multi-model arbitration (exported for services layer). */
 export async function arbitrateSingleClaim(
   claim: { id: string; text: string; verdict: string; confidence: number },
   evidence: EvidenceItem[],
@@ -143,10 +164,6 @@ export async function arbitrateSingleClaim(
   return verifyOneClaim(claim, evidence, contradiction);
 }
 
-/**
- * Multi-model claim verification workflow:
- * 1. OpenAI primary → 2. Claude review (disputed/uncertain) → 3. Gemini corroboration → 4. Consensus
- */
 const MANUAL_MAX_CLAIMS = Number(process.env.MANUAL_MULTIMODEL_MAX_CLAIMS) || 5;
 const MANUAL_CONCURRENCY = Number(process.env.MANUAL_MULTIMODEL_CONCURRENCY) || 3;
 
@@ -215,7 +232,9 @@ export async function runMultiModelVerification(
   let claimsWithGoogleSearch = 0;
   let totalSearchQueries = 0;
   let totalGeminiTokens = 0;
-  let geminiAttempts = verifications.filter((v) => (v.stagesRun ?? []).includes("gemini_corroboration")).length;
+  const geminiAttempts = verifications.filter((v) =>
+    (v.stagesRun ?? []).includes("gemini_corroboration"),
+  ).length;
   for (const v of verifications) {
     const gem = v.consensus.modelVerdicts.find((m) => m.provider === "google");
     if (gem?.geminiMeta?.liveApiCalled) geminiLiveCalls += 1;
@@ -241,8 +260,6 @@ export async function runMultiModelVerification(
     liveEvidenceClaims,
   };
 
-  const heuristicOnly = !hasAnyAiApiKey();
-
   const geminiNote = isGoogleAiConfigured()
     ? geminiLiveCalls > 0
       ? ` Gemini: ${geminiLiveCalls} live call(s), ${totalSearchQueries} Google Search quer${totalSearchQueries === 1 ? "y" : "ies"}.`
@@ -256,7 +273,7 @@ export async function runMultiModelVerification(
     disagreementCount,
     modelsUsed,
     geminiUsage,
-    summary: `${heuristicOnly ? "[Simulated multi-model — no API keys visible on Worker] " : ""}Multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.${geminiNote}`,
+    summary: `Live multi-model verification: ${verifications.length} claim(s), ${disagreementCount} with model disagreement. Overall confidence ${overallConfidence}/100.${geminiNote}`,
     computedAt: new Date().toISOString(),
   };
 }
@@ -301,7 +318,13 @@ export async function enrichVerificationWithMultiModel(
   bundle: import("../analysis/verification/types").VerificationReportBundle,
   trigger: "user" | "scheduled" = "user",
 ): Promise<import("../analysis/verification/types").VerificationReportBundle> {
-  if (!isMultiModelEnabled(trigger)) return bundle;
+  if (!isMultiModelEnabled(trigger)) {
+    throw new AnalysisError(
+      "LIVE_AI_REQUIRED",
+      "Multi-model verification is disabled. Live analysis cannot run.",
+      503,
+    );
+  }
 
   const multiModel = await runMultiModelVerification(bundle.results, { trigger });
   const report = applyMultiModelToReport(bundle.report, multiModel);

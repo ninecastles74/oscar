@@ -1,5 +1,6 @@
 import type { ManualSubmission, UserAnalysisRequest } from "@/types/news-platform";
 import { AnalysisError } from "./errors";
+import { assertLiveAnalysisReport } from "./live-ai-guard";
 import type { AnalysisTrigger } from "./context";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { enrichVerificationWithMultiModel } from "../multi-model";

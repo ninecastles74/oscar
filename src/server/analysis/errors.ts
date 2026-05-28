@@ -5,7 +5,8 @@ export type AnalysisErrorCode =
   | "INSUFFICIENT_CONTENT"
   | "PIPELINE_ERROR"
   | "QUOTA_EXCEEDED"
-  | "AUTH_REQUIRED";
+  | "AUTH_REQUIRED"
+  | "LIVE_AI_REQUIRED";
 
 export class AnalysisError extends Error {
   readonly code: AnalysisErrorCode;

@@ -74,6 +74,8 @@ function AnalyzeResultsPage() {
   }, [isPending, isFailed, router]);
 
   if ("error" in data && data.error && !isPending) {
+    const errCode = "code" in data.error ? String(data.error.code) : "";
+    const isLiveRequired = errCode === "LIVE_AI_REQUIRED";
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
         <h1 className="font-serif text-2xl font-semibold">Analysis failed</h1>
