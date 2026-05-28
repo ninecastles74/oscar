@@ -1,6 +1,6 @@
 import type { ModelProviderId, Verdict } from "@/types/news-platform";
 import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
-import { getServerEnv, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
+import { getServerEnv, isOpenAiConfigured, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
 
 export const MODEL_WEIGHTS = {
   primary: 0.45,
@@ -22,7 +22,7 @@ export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): 
   // User + scheduled feed analysis always run multi-model when not explicitly disabled.
   if (forTrigger === "user" || forTrigger === "scheduled") return true;
   return (
-    isServerEnvTruthy("OPENAI_API_KEY") ||
+    isOpenAiConfigured() ||
     isServerEnvTruthy("ANTHROPIC_API_KEY") ||
     isGoogleAiConfigured() ||
     getServerEnv("MULTI_MODEL_VERIFICATION_ENABLED") === "true"
@@ -31,7 +31,7 @@ export function isMultiModelEnabled(forTrigger: "user" | "scheduled" = "user"): 
 
 export function availableProviders(): ModelProviderId[] {
   const out: ModelProviderId[] = [];
-  if (isServerEnvTruthy("OPENAI_API_KEY")) out.push("openai");
+  if (isOpenAiConfigured()) out.push("openai");
   if (isServerEnvTruthy("ANTHROPIC_API_KEY")) out.push("anthropic");
   if (isGoogleAiConfigured()) out.push("google");
   return out;

@@ -41,5 +41,5 @@ export function isGeminiGoogleSearchEnabled(): boolean {
 }
 
 export function geminiVerificationModel(): string {
-  return readKey("GEMINI_VERIFICATION_MODEL") ?? getServerEnv("GEMINI_VERIFICATION_MODEL") ?? "gemini-2.0-flash";
+  return readKey("GEMINI_VERIFICATION_MODEL") ?? getServerEnv("GEMINI_VERIFICATION_MODEL") ?? "gemini-2.5-flash";
 }

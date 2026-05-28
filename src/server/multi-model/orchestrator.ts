@@ -1,4 +1,5 @@
-import { hasAnyAiApiKey, isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
+import { getLastGeminiError } from "../ai/gemini-client";
+import { hasAnyAiApiKey, isOpenAiConfigured, isServerEnvTruthy, listDetectedAiEnvKeys } from "../env/server-env";
 import type {
   AnalysisReport,
   EvidenceItem,
@@ -52,7 +53,7 @@ async function verifyOneClaim(
   };
 
   let primary: ModelClaimVerdict | null = null;
-  if (isServerEnvTruthy("OPENAI_API_KEY")) {
+  if (isOpenAiConfigured()) {
     stages.push("openai_primary");
     primary = await verifyClaimWithOpenAI({
       claimId: claim.id,
@@ -104,6 +105,7 @@ async function verifyOneClaim(
   let corroboration: ModelClaimVerdict | null = null;
   if (isGeminiLiveEnabled()) {
     stages.push("gemini_corroboration");
+    geminiAttempts += 1;
     corroboration = await verifyClaimWithGemini({
       claimId: claim.id,
       claimText: claim.text,
@@ -170,6 +172,12 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function countLiveEvidenceClaims(results: VerificationPipelineResults): number {
+  return Object.values(results.evidenceByClaimId).filter((items) =>
+    items?.some((e) => e.id.includes("-live-e")),
+  ).length;
+}
+
 export async function runMultiModelVerification(
   results: VerificationPipelineResults,
   options?: { trigger?: "user" | "scheduled" },
@@ -208,6 +216,7 @@ export async function runMultiModelVerification(
   let claimsWithGoogleSearch = 0;
   let totalSearchQueries = 0;
   let totalGeminiTokens = 0;
+  let geminiAttempts = verifications.filter((v) => v.stages.includes("gemini_corroboration")).length;
   for (const v of verifications) {
     const gem = v.consensus.modelVerdicts.find((m) => m.provider === "google");
     if (gem?.geminiMeta?.liveApiCalled) geminiLiveCalls += 1;
@@ -218,6 +227,8 @@ export async function runMultiModelVerification(
     if (gem?.geminiMeta?.totalTokens) totalGeminiTokens += gem.geminiMeta.totalTokens;
   }
 
+  const liveEvidenceClaims = countLiveEvidenceClaims(results);
+
   const geminiUsage = {
     configured: isGoogleAiConfigured(),
     googleSearchEnabled: isGeminiGoogleSearchEnabled(),
@@ -226,6 +237,9 @@ export async function runMultiModelVerification(
     totalSearchQueries,
     totalTokens: totalGeminiTokens > 0 ? totalGeminiTokens : undefined,
     runtimeEnvKeys: listDetectedAiEnvKeys(),
+    liveApiAttempts: geminiAttempts,
+    lastApiError: geminiLiveCalls === 0 && geminiAttempts > 0 ? getLastGeminiError() : undefined,
+    liveEvidenceClaims,
   };
 
   const heuristicOnly = !hasAnyAiApiKey();
@@ -233,7 +247,7 @@ export async function runMultiModelVerification(
   const geminiNote = isGoogleAiConfigured()
     ? geminiLiveCalls > 0
       ? ` Gemini: ${geminiLiveCalls} live call(s), ${totalSearchQueries} Google Search quer${totalSearchQueries === 1 ? "y" : "ies"}.`
-      : " Gemini key set but no live corroboration responses (check model name / API errors)."
+      : ` Gemini key set but no live corroboration responses (${geminiAttempts} attempt(s)${getLastGeminiError() ? ` — ${getLastGeminiError()}` : ""}).`
     : " Gemini: not configured (set GOOGLE_AI_API_KEY or GEMINI_API_KEY).";
 
   return {

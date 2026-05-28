@@ -175,6 +175,10 @@ export function listApiKeyEnvNames(snapshot?: Record<string, unknown>): string[]
     .sort();
 }
 
+export function isOpenAiConfigured(): boolean {
+  return !!(getServerEnv("OPENAI_API_KEY") || getServerEnv("OPENAI_KEYS"));
+}
+
 export function hasAnyAiApiKey(snapshot?: Record<string, unknown>): boolean {
   const aiKeys = [
     "GEMINI_API_KEY",

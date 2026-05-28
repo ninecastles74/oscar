@@ -1,6 +1,6 @@
 import { getGoogleAiApiKey } from "../ai/google-api-key";
 import { geminiGenerateContent } from "../ai/gemini-client";
-import { getServerEnv } from "../env/server-env";
+import { getServerEnv, isOpenAiConfigured } from "../env/server-env";
 import { listApiKeyEnvNames, captureWorkerEnvSnapshot } from "../env/server-env";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { fetchWithTimeout } from "../utils/fetch-timeout";
@@ -13,7 +13,7 @@ export async function testAiConnections() {
   const out: Record<string, unknown> = {
     detectedKeyNames: keys,
     geminiKeyPresent: !!getGoogleAiApiKey(),
-    openaiKeyPresent: !!getServerEnv("OPENAI_API_KEY"),
+    openaiKeyPresent: isOpenAiConfigured(),
     anthropicKeyPresent: !!getServerEnv("ANTHROPIC_API_KEY"),
   };
 
@@ -25,7 +25,7 @@ export async function testAiConnections() {
     ? { ok: true, model: gemini.model, tokens: gemini.totalTokens }
     : { ok: false, error: "Gemini call failed — check key, model, and Worker logs" };
 
-  const openaiKey = getServerEnv("OPENAI_API_KEY");
+  const openaiKey = getServerEnv("OPENAI_API_KEY") ?? getServerEnv("OPENAI_KEYS");
   if (openaiKey) {
     try {
       const res = await fetchWithTimeout(

@@ -20,6 +20,22 @@ export interface GeminiGenerateResult {
 
 const DEFAULT_TIMEOUT = Number(getServerEnv("GEMINI_FETCH_TIMEOUT_MS")) || 28_000;
 
+let lastGeminiError: string | undefined;
+
+export function getLastGeminiError(): string | undefined {
+  return lastGeminiError;
+}
+
+export function clearLastGeminiError(): void {
+  lastGeminiError = undefined;
+}
+
+export function geminiModelCandidates(): string[] {
+  const primary = geminiVerificationModel();
+  const fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  return [...new Set([primary, ...fallbacks].filter(Boolean))];
+}
+
 export async function geminiGenerateContent(options: {
   user: string;
   system?: string;
@@ -29,9 +45,33 @@ export async function geminiGenerateContent(options: {
   timeoutMs?: number;
 }): Promise<GeminiGenerateResult | null> {
   const apiKey = getGoogleAiApiKey();
-  if (!apiKey) return null;
+  if (!apiKey) {
+    lastGeminiError = "No Gemini API key";
+    return null;
+  }
 
-  const model = options.model ?? geminiVerificationModel();
+  const models = options.model ? [options.model] : geminiModelCandidates();
+  lastGeminiError = undefined;
+
+  for (const model of models) {
+    const result = await geminiGenerateContentOnce(apiKey, model, options);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+async function geminiGenerateContentOnce(
+  apiKey: string,
+  model: string,
+  options: {
+    user: string;
+    system?: string;
+    useGoogleSearch?: boolean;
+    jsonMode?: boolean;
+    timeoutMs?: number;
+  },
+): Promise<GeminiGenerateResult | null> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const body: Record<string, unknown> = {
@@ -75,13 +115,18 @@ export async function geminiGenerateContent(options: {
     };
 
     if (!res.ok) {
-      console.warn("[gemini-client]", res.status, data.error?.message ?? "");
+      lastGeminiError = `${model}: HTTP ${res.status} ${data.error?.message ?? ""}`.trim();
+      console.warn("[gemini-client]", lastGeminiError);
       return null;
     }
 
     const candidate = data.candidates?.[0];
     const text = candidate?.content?.parts?.map((p) => p.text).filter(Boolean).join("\n") ?? "";
-    if (!text) return null;
+    if (!text) {
+      lastGeminiError = `${model}: empty response`;
+      console.warn("[gemini-client]", lastGeminiError);
+      return null;
+    }
 
     return {
       text,
@@ -90,7 +135,8 @@ export async function geminiGenerateContent(options: {
       model: options.useGoogleSearch ? `${model}+google_search` : model,
     };
   } catch (err) {
-    console.warn("[gemini-client] failed:", err instanceof Error ? err.message : err);
+    lastGeminiError = `${model}: ${err instanceof Error ? err.message : String(err)}`;
+    console.warn("[gemini-client] failed:", lastGeminiError);
     return null;
   }
 }

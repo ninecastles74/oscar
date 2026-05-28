@@ -4,7 +4,7 @@ import {
   isGeminiGoogleSearchEnabled,
   isGoogleAiConfigured,
 } from "../ai/google-api-key";
-import { isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
+import { isOpenAiConfigured, isServerEnvFalse, isServerEnvTruthy } from "../env/server-env";
 import { availableProviders, isMultiModelEnabled } from "./config";
 
 export interface MultiModelProviderStatus {
@@ -26,7 +26,7 @@ export function getMultiModelProviderStatus(
   return {
     multiModelEnabled: isMultiModelEnabled(trigger),
     trigger,
-    openaiConfigured: isServerEnvTruthy("OPENAI_API_KEY"),
+    openaiConfigured: isOpenAiConfigured(),
     anthropicConfigured: isServerEnvTruthy("ANTHROPIC_API_KEY"),
     googleConfigured: isGoogleAiConfigured(),
     googleKeyEnvHint: getGoogleAiApiKey()

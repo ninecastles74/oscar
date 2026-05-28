@@ -37,7 +37,7 @@ function parseClaims(raw: string, prefixId: string): ExtractedClaim[] | null {
 }
 
 async function extractWithOpenAI(articleText: string, prefixId: string): Promise<ExtractedClaim[] | null> {
-  const apiKey = getServerEnv("OPENAI_API_KEY");
+  const apiKey = getServerEnv("OPENAI_API_KEY") ?? getServerEnv("OPENAI_KEYS");
   if (!apiKey) return null;
   const model = getServerEnv("OPENAI_TOPIC_MODEL") ?? "gpt-4o-mini";
   const system =
