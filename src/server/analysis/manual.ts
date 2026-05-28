@@ -180,9 +180,10 @@ export async function executeManualAnalysis(
     let bundle = await runVerificationPipeline(pipelineArticle);
       console.log(
         "[executeManualAnalysis] AI diagnostics",
-        JSON.stringify(getAiAnalysisDiagnostics()),
+        JSON.stringify(await getAiAnalysisDiagnostics()),
       );
     bundle = await enrichVerificationWithMultiModel(bundle, "user");
+    assertLiveAnalysisReport(bundle.report, bundle.stages);
     const { report, results } = bundle;
 
     const reliability = computeAndStoreReliabilityScores({
