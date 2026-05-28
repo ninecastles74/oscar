@@ -26,6 +26,7 @@ import { computeAndStoreReliabilityScores, getReliabilityBundleByArticleId } fro
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
 import { buildStoryScoreExplainability } from "../transparency-explainability/build-story-explainability";
+import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
 
@@ -159,6 +160,7 @@ async function ensureFeedConsensusReport(
   cluster: StoryCluster,
   articles: NewsArticle[],
 ): Promise<StoryConsensusReport> {
+  ensureWorkerEnvFromPlatform();
   const cached = getStoryConsensus(cluster.id);
   if (cached && !clusterArticlesNeedAiRefresh(articles)) {
     syncStoryScoresToArticlePages(articles, cached);

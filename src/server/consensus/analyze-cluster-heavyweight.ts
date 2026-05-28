@@ -1,5 +1,6 @@
 import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { enrichVerificationWithMultiModel } from "../multi-model";
+import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { runVerificationPipeline } from "../analysis/verification";
 import { computeAndStoreReliabilityScores } from "../reliability/engine";
 import { applyClaimConsensusToReport } from "../consensus-engine";
@@ -51,6 +52,7 @@ export async function analyzeArticleHeavyweight(
   article: NewsArticle,
   options?: { force?: boolean },
 ): Promise<AnalyzedArticleBundle> {
+  ensureWorkerEnvFromPlatform();
   const key = article.id || stableArticleId(article.url);
   const existing = getArticleBundle(key);
   if (existing && !options?.force && !bundleNeedsAiReanalysis(existing)) return existing;

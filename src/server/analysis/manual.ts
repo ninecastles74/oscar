@@ -4,6 +4,7 @@ import type { AnalysisTrigger } from "./context";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { enrichVerificationWithMultiModel } from "../multi-model";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
+import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import {
   captureWorkerEnvSnapshot,
   hasAnyAiApiKey,
@@ -116,6 +117,7 @@ export async function executeManualAnalysis(
   requestId: string,
   envSnapshot?: Record<string, unknown>,
 ): Promise<void> {
+  ensureWorkerEnvFromPlatform();
   const snap =
     envSnapshot && Object.keys(envSnapshot).length > 0 ? envSnapshot : captureWorkerEnvSnapshot();
   if (Object.keys(snap).length > 0) {

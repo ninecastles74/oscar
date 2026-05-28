@@ -13,6 +13,7 @@ import {
   hasAnyAiApiKey,
   listApiKeyEnvNames,
 } from "../env/server-env";
+import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -78,6 +79,7 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     requestId,
   });
 
+  ensureWorkerEnvFromPlatform();
   const envSnapshot = captureWorkerEnvSnapshot();
   const apiKeys = listApiKeyEnvNames(envSnapshot);
   console.log(
@@ -87,43 +89,25 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
 
   const quota = await getQuotaStatus(actor);
 
-  // Run in-request when keys exist — waitUntil background often loses Worker secrets.
-  if (hasAnyAiApiKey(envSnapshot)) {
-    try {
-      await executeManualAnalysis(requestId, envSnapshot);
-    } catch (err) {
-      console.error(
-        "[submitManualAnalysis] inline analysis failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-    const done = await getManualAnalysisStatus(requestId);
-    return {
-      requestId,
-      submissionId,
-      status: done?.status === "completed" ? ("completed" as const) : ("processing" as const),
-      quota,
-      envKeysDetected: apiKeys,
-    };
+  try {
+    await executeManualAnalysis(requestId, envSnapshot);
+  } catch (err) {
+    console.error(
+      "[submitManualAnalysis] analysis failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
-  runInWorkerBackground(
-    executeManualAnalysis(requestId, envSnapshot).catch((err) => {
-      console.error(
-        "[submitManualAnalysis] background failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }),
-  );
-
+  const done = await getManualAnalysisStatus(requestId);
   return {
     requestId,
     submissionId,
-    status: "processing" as const,
+    status: done?.status === "completed" ? ("completed" as const) : ("processing" as const),
     quota,
     envKeysDetected: apiKeys,
-    envWarning:
-      "No API keys visible to this Worker. Add GEMINI_API_KEY (Secret) on the oscar worker and redeploy.",
+    envWarning: hasAnyAiApiKey(envSnapshot)
+      ? undefined
+      : "No API keys visible to this Worker. Add GEMINI_API_KEY as a Secret on the oscar worker, redeploy, then retry.",
   };
 }
 

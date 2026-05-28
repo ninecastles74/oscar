@@ -38,12 +38,12 @@ function mergeStringEnvInto(target: Record<string, unknown>, record: Record<stri
 }
 
 export function getServerEnv(key: string): string | undefined {
+  const fromCloudflare = readFromRecord(cloudflareEnv as Record<string, unknown>, key);
+  if (fromCloudflare) return fromCloudflare;
+
   const bind = getWorkerBindingsRecord();
   const fromBindings = readFromRecord(bind, key);
   if (fromBindings) return fromBindings;
-
-  const fromCloudflare = readFromRecord(cloudflareEnv as Record<string, unknown>, key);
-  if (fromCloudflare) return fromCloudflare;
 
   const fromProcess = process.env[key];
   if (typeof fromProcess === "string" && fromProcess.trim()) return fromProcess.trim();

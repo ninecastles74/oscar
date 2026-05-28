@@ -9,6 +9,7 @@ import {
 } from "../../news/feed-store";
 import { saveFeedStateToKv } from "../../news/feed-persist";
 import { runHeavyweightClusterAnalysis } from "../../consensus/analyze-cluster-heavyweight";
+import { ensureWorkerEnvFromPlatform } from "../../env/ensure-worker-env";
 
 export interface ScheduledNewsRunResult {
   success: boolean;
@@ -25,6 +26,7 @@ export interface ScheduledNewsRunResult {
  * Top 100 feed is time-ranked; older clusters drop off the visible feed when capped at 100.
  */
 export async function runScheduledNewsPipeline(): Promise<ScheduledNewsRunResult> {
+  ensureWorkerEnvFromPlatform();
   const errors: string[] = [];
   const ingestedAt = new Date().toISOString();
 

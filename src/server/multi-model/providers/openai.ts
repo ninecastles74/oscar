@@ -1,5 +1,13 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
+import { env as cloudflareEnv } from "cloudflare:workers";
 import { getServerEnv } from "../../env/server-env";
+
+function openaiKey(): string | undefined {
+  const v = (cloudflareEnv as Record<string, unknown>).OPENAI_API_KEY;
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return getServerEnv("OPENAI_API_KEY");
+}
+
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
@@ -12,7 +20,7 @@ const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficien
 export async function verifyClaimWithOpenAI(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
-  const apiKey = getServerEnv("OPENAI_API_KEY");
+  const apiKey = openaiKey();
   if (!apiKey) return null;
 
   const model =

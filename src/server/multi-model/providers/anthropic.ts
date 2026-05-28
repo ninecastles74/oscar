@@ -1,5 +1,13 @@
 import type { ModelClaimVerdict } from "@/types/news-platform";
+import { env as cloudflareEnv } from "cloudflare:workers";
 import { getServerEnv } from "../../env/server-env";
+
+function anthropicKey(): string | undefined {
+  const v = (cloudflareEnv as Record<string, unknown>).ANTHROPIC_API_KEY;
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return getServerEnv("ANTHROPIC_API_KEY");
+}
+
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
 import { buildVerificationPrompt, formatEvidenceSummary } from "./prompt";
@@ -12,7 +20,7 @@ const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficien
 export async function verifyClaimWithAnthropic(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
-  const apiKey = getServerEnv("ANTHROPIC_API_KEY");
+  const apiKey = anthropicKey();
   if (!apiKey) return null;
 
   const model = getServerEnv("ANTHROPIC_VERIFICATION_MODEL") ?? "claude-3-5-haiku-20241022";
