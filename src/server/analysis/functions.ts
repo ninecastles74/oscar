@@ -17,6 +17,7 @@ import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
+import { testAiConnections } from "./test-ai-connections";
 import {
   assertAiAnalysisQuota,
   getQuotaStatus,
@@ -172,3 +173,5 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
 export const getAiDiagnostics = createServerFn({ method: "GET" }).handler(async () => {
   return getAiAnalysisDiagnostics();
 });
+
+export const testAiConnectionsFn = createServerFn({ method: "GET" }).handler(async () => testAiConnections());

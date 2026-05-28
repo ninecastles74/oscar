@@ -7,6 +7,7 @@ import { extractClaims } from "./extractClaims";
 import { extractClaimsWithLlm } from "./extractClaimsLlm";
 import { generateFinalReport } from "./generateFinalReport";
 import { retrieveEvidence } from "./retrieveEvidence";
+import { retrieveEvidenceLive } from "./retrieveEvidenceLive";
 import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
@@ -52,7 +53,19 @@ export async function runVerificationPipeline(
   }));
 
   stages.push("retrieveEvidence");
-  const evidenceByClaimId = retrieveEvidence(classifiedWithTopics);
+  let evidenceByClaimId = await retrieveEvidenceLive(classifiedWithTopics);
+  if (Object.keys(evidenceByClaimId).length > 0) {
+    stages.push("retrieveEvidenceLive");
+    for (const c of classifiedWithTopics) {
+      if (!evidenceByClaimId[c.id]?.length) {
+        const mock = retrieveEvidence([c]);
+        evidenceByClaimId[c.id] = mock[c.id] ?? [];
+      }
+    }
+  } else {
+    evidenceByClaimId = retrieveEvidence(classifiedWithTopics);
+    stages.push("retrieveEvidenceMock");
+  }
 
   stages.push("compareSources");
   const comparisons = compareSources(classifiedWithTopics, evidenceByClaimId);

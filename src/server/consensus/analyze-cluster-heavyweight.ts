@@ -14,6 +14,7 @@ import {
 } from "../news/feed-store";
 import type { PipelineArticleContext } from "../analysis/types";
 import { buildStoryConsensus } from "./build-consensus";
+import { enrichStoryConsensusWithGemini } from "./enrich-story-consensus-ai";
 import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
 import type { AnalyzedArticleBundle, StoryConsensusInput } from "./types";
 
@@ -45,7 +46,9 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
 
 /** Full pipeline + multi-model + reliability for one article (scheduled, no user quota). */
 function bundleNeedsAiReanalysis(bundle: AnalyzedArticleBundle): boolean {
-  return !bundle.report.multiModelVerification;
+  if (!bundle.report.multiModelVerification) return true;
+  const live = bundle.report.multiModelVerification.geminiUsage?.liveApiCalls ?? 0;
+  return live === 0;
 }
 
 export async function analyzeArticleHeavyweight(
@@ -139,7 +142,8 @@ export async function runHeavyweightClusterAnalysis(
     summary: cluster.summary,
     articles: analyzed,
   };
-  const report = buildStoryConsensus(input);
+  let report = buildStoryConsensus(input);
+  report = await enrichStoryConsensusWithGemini(report, input);
   updateClusterFromConsensus(cluster.id, report);
   return report;
 }

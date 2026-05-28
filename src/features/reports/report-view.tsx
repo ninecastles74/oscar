@@ -210,6 +210,12 @@ export function ReportView({
               then run a new analysis.
             </div>
           )}
+        {platformReport?.multiModelVerification?.geminiUsage?.liveApiCalls === 0 && (
+            <div className="mb-4 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm">
+              Evidence may be from the built-in source index only. With <code className="text-xs">GEMINI_API_KEY</code> set,
+              new analyses use Gemini Google Search for live research before consensus.
+            </div>
+          )}
         {platformReport?.multiModelVerification && (
         <div className="mt-8 rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Multi-model AI (OpenAI · Claude · Gemini)</h2>
