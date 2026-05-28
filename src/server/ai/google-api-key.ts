@@ -1,4 +1,5 @@
 import { env as cloudflareEnv } from "cloudflare:workers";
+import { resolveGeminiVerificationModel } from "./gemini-models";
 import { getServerEnv, isServerEnvFalse } from "../env/server-env";
 
 const GEMINI_KEY_NAMES = [
@@ -41,5 +42,5 @@ export function isGeminiGoogleSearchEnabled(): boolean {
 }
 
 export function geminiVerificationModel(): string {
-  return readKey("GEMINI_VERIFICATION_MODEL") ?? getServerEnv("GEMINI_VERIFICATION_MODEL") ?? "gemini-2.5-flash";
+  return resolveGeminiVerificationModel();
 }

@@ -10,7 +10,7 @@ import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
-import { getLastGeminiError } from "../../ai/gemini-client";
+import { getLastGeminiAttemptLog, getLastGeminiError } from "../../ai/gemini-client";
 import { AnalysisError } from "../errors";
 
 export { VERDICT_LABELS } from "./types";
@@ -66,10 +66,12 @@ export async function runVerificationPipeline(
   const missingLive = classifiedWithTopics.filter((c) => !evidenceByClaimId[c.id]?.length);
   if (missingLive.length > 0) {
     const hint = getLastGeminiError();
+    const attempts = getLastGeminiAttemptLog();
+    const detail = attempts.length ? attempts.join("; ") : hint;
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
       `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s).${
-        hint ? ` ${hint}` : ""
+        detail ? ` ${detail}` : " Try GEMINI_VERIFICATION_MODEL=gemini-2.5-flash"
       }`,
       503,
     );

@@ -1,4 +1,5 @@
-import { geminiVerificationModel, getGoogleAiApiKey } from "./google-api-key";
+import { getGoogleAiApiKey } from "./google-api-key";
+import { geminiModelCandidates } from "./gemini-models";
 import { getServerEnv } from "../env/server-env";
 import { fetchWithTimeout } from "../utils/fetch-timeout";
 
@@ -21,20 +22,22 @@ export interface GeminiGenerateResult {
 const DEFAULT_TIMEOUT = Number(getServerEnv("GEMINI_FETCH_TIMEOUT_MS")) || 28_000;
 
 let lastGeminiError: string | undefined;
+let lastGeminiAttemptLog: string[] = [];
 
 export function getLastGeminiError(): string | undefined {
   return lastGeminiError;
 }
 
-export function clearLastGeminiError(): void {
-  lastGeminiError = undefined;
+export function getLastGeminiAttemptLog(): string[] {
+  return [...lastGeminiAttemptLog];
 }
 
-export function geminiModelCandidates(): string[] {
-  const primary = geminiVerificationModel();
-  const fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-  return [...new Set([primary, ...fallbacks].filter(Boolean))];
+export function clearLastGeminiError(): void {
+  lastGeminiError = undefined;
+  lastGeminiAttemptLog = [];
 }
+
+export { geminiModelCandidates } from "./gemini-models";
 
 export async function geminiGenerateContent(options: {
   user: string;
@@ -52,18 +55,25 @@ export async function geminiGenerateContent(options: {
 
   const models = options.model ? [options.model] : geminiModelCandidates();
   lastGeminiError = undefined;
+  lastGeminiAttemptLog = [];
 
   for (const model of models) {
-    const result = await geminiGenerateContentOnce(apiKey, model, options);
-    if (result) return result;
+    for (const apiVersion of ["v1beta", "v1"] as const) {
+      const result = await geminiGenerateContentOnce(apiKey, model, apiVersion, options);
+      if (result) return result;
+    }
   }
 
+  if (lastGeminiAttemptLog.length > 0) {
+    lastGeminiError = `All models failed. ${lastGeminiAttemptLog.join("; ")}`;
+  }
   return null;
 }
 
 async function geminiGenerateContentOnce(
   apiKey: string,
   model: string,
+  apiVersion: "v1beta" | "v1",
   options: {
     user: string;
     system?: string;
@@ -72,7 +82,7 @@ async function geminiGenerateContentOnce(
     timeoutMs?: number;
   },
 ): Promise<GeminiGenerateResult | null> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`;
 
   const body: Record<string, unknown> = {
     ...(options.system
@@ -115,16 +125,20 @@ async function geminiGenerateContentOnce(
     };
 
     if (!res.ok) {
-      lastGeminiError = `${model}: HTTP ${res.status} ${data.error?.message ?? ""}`.trim();
-      console.warn("[gemini-client]", lastGeminiError);
+      const msg = `${model}@${apiVersion}: HTTP ${res.status} ${data.error?.message ?? ""}`.trim();
+      lastGeminiAttemptLog.push(msg);
+      lastGeminiError = msg;
+      console.warn("[gemini-client]", msg);
       return null;
     }
 
     const candidate = data.candidates?.[0];
     const text = candidate?.content?.parts?.map((p) => p.text).filter(Boolean).join("\n") ?? "";
     if (!text) {
-      lastGeminiError = `${model}: empty response`;
-      console.warn("[gemini-client]", lastGeminiError);
+      const msg = `${model}@${apiVersion}: empty response`;
+      lastGeminiAttemptLog.push(msg);
+      lastGeminiError = msg;
+      console.warn("[gemini-client]", msg);
       return null;
     }
 
@@ -135,8 +149,10 @@ async function geminiGenerateContentOnce(
       model: options.useGoogleSearch ? `${model}+google_search` : model,
     };
   } catch (err) {
-    lastGeminiError = `${model}: ${err instanceof Error ? err.message : String(err)}`;
-    console.warn("[gemini-client] failed:", lastGeminiError);
+    const msg = `${model}@${apiVersion}: ${err instanceof Error ? err.message : String(err)}`;
+    lastGeminiAttemptLog.push(msg);
+    lastGeminiError = msg;
+    console.warn("[gemini-client] failed:", msg);
     return null;
   }
 }

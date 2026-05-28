@@ -1,6 +1,6 @@
 import type { AnalysisReport } from "@/types/news-platform";
 import { hasHeuristicModelVerdicts } from "@/lib/live-analysis";
-import { getLastGeminiError } from "../ai/gemini-client";
+import { getLastGeminiAttemptLog, getLastGeminiError } from "../ai/gemini-client";
 import { isGoogleAiConfigured } from "../ai/google-api-key";
 import { AnalysisError } from "./errors";
 
@@ -47,12 +47,14 @@ export function assertLiveAnalysisReport(
   const liveCalls = gu?.liveApiCalls ?? 0;
   const liveEvidence = gu?.liveEvidenceClaims ?? 0;
   if (liveCalls === 0 && liveEvidence === 0) {
+    const attempts = getLastGeminiAttemptLog();
     const err = gu?.lastApiError ?? getLastGeminiError();
+    const detail = attempts.length ? attempts.join("; ") : err;
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
-      err
-        ? `No successful live Gemini calls. ${err}`
-        : "No successful live Gemini calls. Check Worker logs, model name, and API quota.",
+      detail
+        ? `No successful live Gemini calls. ${detail}`
+        : "No successful live Gemini calls. Set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash (or gemini-3.5-flash) and check API quota.",
       503,
     );
   }
