@@ -1,6 +1,6 @@
 import { auditSecretBindings, listDetectedAiEnvKeys, listMalformedEnvKeyAliases } from "../env/server-env";
 import { getMultiModelProviderStatus } from "../multi-model/provider-status";
-import { getGoogleAiApiKey, isGoogleAiConfigured } from "../ai/google-api-key";
+import { getGoogleAiApiKey, getGoogleAiKeySetupHint, isGoogleAiConfigured } from "../ai/google-api-key";
 import { geminiGenerateContent, getLastGeminiError } from "../ai/gemini-client";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { getServerEnv } from "../env/server-env";
@@ -19,6 +19,7 @@ export async function getAiAnalysisDiagnostics() {
 
   const emptyBindings = secretAudit.filter((a) => a.status === "empty");
   const geminiKey = getGoogleAiApiKey();
+  const geminiKeyHint = getGoogleAiKeySetupHint();
   let geminiSmokeTest: { ok: boolean; model?: string; error?: string } | undefined;
   if (geminiKey) {
     const ping = await geminiGenerateContent({
@@ -31,7 +32,9 @@ export async function getAiAnalysisDiagnostics() {
   }
 
   let likelyOfflineReason: string;
-  if (geminiKey && geminiSmokeTest?.ok) {
+  if (!geminiKey && geminiKeyHint) {
+    likelyOfflineReason = geminiKeyHint;
+  } else if (geminiKey && geminiSmokeTest?.ok) {
     likelyOfflineReason =
       "Gemini key works (smoke test passed). If this report shows 0 live calls, it may be from an older run — run a new analysis.";
   } else if (geminiKey) {

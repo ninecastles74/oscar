@@ -1,8 +1,8 @@
-import { getGoogleAiApiKey } from "./google-api-key";
+import { getGoogleAiApiKey, getGoogleAiKeySetupHint } from "./google-api-key";
 import { geminiModelCandidates } from "./gemini-models";
+import { extractGoogleApiKey, sanitizeGoogleApiKeyOrUndefined } from "./sanitize-api-secret";
 import { parseRetryAfterSeconds, withGeminiRateLimit } from "./gemini-rate-limit";
 import { getServerEnv } from "../env/server-env";
-import { fetchWithTimeout } from "../utils/fetch-timeout";
 
 export interface GeminiGroundingChunk {
   web?: { title?: string; uri?: string };
@@ -45,6 +45,25 @@ export function clearLastGeminiError(): void {
 
 export { geminiModelCandidates } from "./gemini-models";
 
+const GEMINI_CLIENT_VERSION = "2026-05-20-v4";
+
+async function geminiFetch(url: string, body: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    // Isolated Request — do not forward browser/worker headers (avoids Invalid header value).
+    const request = new Request(url, {
+      method: "POST",
+      headers: new Headers([["content-type", "application/json"]]),
+      body,
+      signal: controller.signal,
+    });
+    return await fetch(request);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function needsV1Beta(options: {
   system?: string;
   useGoogleSearch?: boolean;
@@ -63,7 +82,7 @@ export async function geminiGenerateContent(options: {
 }): Promise<GeminiGenerateResult | null> {
   const apiKey = getGoogleAiApiKey();
   if (!apiKey) {
-    lastGeminiError = "No Gemini API key";
+    lastGeminiError = getGoogleAiKeySetupHint() ?? "No valid Gemini API key.";
     return null;
   }
 
@@ -106,7 +125,15 @@ async function geminiGenerateContentOnce(
     timeoutMs?: number;
   },
 ): Promise<GeminiGenerateResult | null> {
-  const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent`;
+  const cleanedKey = sanitizeGoogleApiKeyOrUndefined(apiKey) ?? extractGoogleApiKey(apiKey);
+  if (!cleanedKey) {
+    const msg = `${model}@${apiVersion}: ${getGoogleAiKeySetupHint() ?? "Invalid Gemini API key format."} [${GEMINI_CLIENT_VERSION}]`;
+    lastGeminiAttemptLog.push(msg);
+    lastGeminiError = msg;
+    return null;
+  }
+
+  const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(cleanedKey)}`;
 
   const body: Record<string, unknown> = {
     ...(options.system
@@ -126,20 +153,11 @@ async function geminiGenerateContentOnce(
     body.tools = [{ google_search: {} }];
   }
 
+  const bodyJson = JSON.stringify(body);
+
   for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
     try {
-      const res = await fetchWithTimeout(
-        url,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify(body),
-        },
-        options.timeoutMs ?? DEFAULT_TIMEOUT,
-      );
+      const res = await geminiFetch(url, bodyJson, options.timeoutMs ?? DEFAULT_TIMEOUT);
 
       const data = (await res.json()) as {
         candidates?: Array<{
@@ -202,7 +220,12 @@ async function geminiGenerateContentOnce(
         model: options.useGoogleSearch ? `${model}+google_search` : model,
       };
     } catch (err) {
-      const msg = `${model}@${apiVersion}: ${err instanceof Error ? err.message : String(err)}`;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const hint =
+        errMsg.includes("Invalid header value")
+          ? ` — redeploy Oscar (need client ${GEMINI_CLIENT_VERSION}), then re-save GEMINI_API_KEY with only AIza… in Cloudflare Secrets`
+          : "";
+      const msg = `${model}@${apiVersion}: ${errMsg}${hint} [${GEMINI_CLIENT_VERSION}]`;
       lastGeminiAttemptLog.push(msg);
       lastGeminiError = msg;
       console.warn("[gemini-client] failed:", msg);

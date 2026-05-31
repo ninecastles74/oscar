@@ -1,13 +1,17 @@
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { getServerEnv } from "../env/server-env";
+import { sanitizeApiSecretOrUndefined } from "./sanitize-api-secret";
 import { fetchWithTimeout } from "../utils/fetch-timeout";
 
 function openaiKey(): string | undefined {
   const cf = cloudflareEnv as Record<string, unknown>;
   for (const name of ["OPENAI_API_KEY", "OPENAI_KEYS"] as const) {
     const v = cf[name];
-    if (typeof v === "string" && v.trim()) return v.trim();
-    const fromEnv = getServerEnv(name);
+    if (typeof v === "string" && v.trim()) {
+      const cleaned = sanitizeApiSecretOrUndefined(v);
+      if (cleaned) return cleaned;
+    }
+    const fromEnv = sanitizeApiSecretOrUndefined(getServerEnv(name));
     if (fromEnv) return fromEnv;
   }
   return undefined;

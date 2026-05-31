@@ -2,6 +2,7 @@ import type { ModelClaimVerdict, Verdict } from "@/types/news-platform";
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { anthropicModelCandidates } from "../../ai/anthropic-models";
 import { VERDICT_JSON_SCHEMA } from "../../ai/llm-schemas";
+import { sanitizeApiSecretOrUndefined } from "../../ai/sanitize-api-secret";
 import { getServerEnv } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
@@ -10,8 +11,10 @@ import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
 
 function anthropicKey(): string | undefined {
   const v = (cloudflareEnv as Record<string, unknown>).ANTHROPIC_API_KEY;
-  if (typeof v === "string" && v.trim()) return v.trim();
-  return getServerEnv("ANTHROPIC_API_KEY");
+  if (typeof v === "string" && v.trim()) {
+    return sanitizeApiSecretOrUndefined(v);
+  }
+  return sanitizeApiSecretOrUndefined(getServerEnv("ANTHROPIC_API_KEY"));
 }
 
 const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 20_000;

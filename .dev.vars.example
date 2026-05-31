@@ -18,6 +18,14 @@ SCHEDULED_NEWS_ENABLED=true
 # GUARDIAN_API_KEY=
 
 # --- Gemini / Google AI (use any one secret name on Workers) ---
+#
+# LOCAL (.dev.vars / .env) — use NAME=value on one line:
+#   GEMINI_API_KEY=AIzaSyC_your_key_here
+#
+# CLOUDFLARE DASHBOARD (Workers → oscar → Settings → Secrets) — two fields:
+#   Name:  GEMINI_API_KEY          ← no trailing "=" on the name
+#   Value: AIzaSyC_your_key_here    ← ONLY the key, NOT "GEMINI_API_KEY=..."
+#
 # GOOGLE_AI_API_KEY=
 # GEMINI_API_KEY=
 # GEMINI_VERIFICATION_MODEL=gemini-2.5-flash
