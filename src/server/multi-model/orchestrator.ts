@@ -19,6 +19,7 @@ import {
   REVIEW_CONFIDENCE_THRESHOLD,
   REVIEW_VERDICTS,
 } from "./config";
+import { getServerEnv } from "../env/server-env";
 import { isGeminiGoogleSearchEnabled, isGoogleAiConfigured } from "../ai/google-api-key";
 import { buildMultiModelConsensus, toClaimVerification } from "./consensus";
 import { providersInvolved } from "./disagreement";
@@ -134,13 +135,15 @@ async function verifyOneClaim(
     liveAiError("GEMINI_API_KEY is required for live corroboration with Google Search.");
   }
 
-  stages.push("gemini_corroboration");
+  const hasLiveWebEvidence = evidence.some((e) => e.id?.includes("-live-e"));
+  stages.push(hasLiveWebEvidence ? "gemini_corroboration_json" : "gemini_corroboration");
   const corroboration = await verifyClaimWithGemini({
     claimId: claim.id,
     claimText: claim.text,
     evidence: evidencePayload,
     role: "corroboration",
     priorVerdict: review.skipped ? primary : review,
+    skipGoogleSearch: hasLiveWebEvidence,
   });
   if (!corroboration?.geminiMeta?.liveApiCalled) {
     const err = getLastGeminiError();
@@ -167,8 +170,8 @@ export async function arbitrateSingleClaim(
   return verifyOneClaim(claim, evidence, contradiction);
 }
 
-const MANUAL_MAX_CLAIMS = Number(process.env.MANUAL_MULTIMODEL_MAX_CLAIMS) || 5;
-const MANUAL_CONCURRENCY = Number(process.env.MANUAL_MULTIMODEL_CONCURRENCY) || 1;
+const MANUAL_MAX_CLAIMS = Number(getServerEnv("MANUAL_MULTIMODEL_MAX_CLAIMS")) || 5;
+const MANUAL_CONCURRENCY = Number(getServerEnv("MANUAL_MULTIMODEL_CONCURRENCY")) || 1;
 
 async function mapWithConcurrency<T, R>(
   items: T[],

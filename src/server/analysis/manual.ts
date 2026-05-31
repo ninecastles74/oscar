@@ -33,7 +33,7 @@ import {
 } from "./manual-persist";
 
 const MANUAL_ANALYSIS_WALL_MS =
-  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 3 * 60 * 1000;
+  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 5 * 60 * 1000;
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;

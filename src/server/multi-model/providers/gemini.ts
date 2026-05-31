@@ -52,7 +52,9 @@ export async function verifyClaimWithGemini(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
   const useGoogleSearch =
-    input.role === "corroboration" && isGeminiGoogleSearchEnabled();
+    input.role === "corroboration" &&
+    isGeminiGoogleSearchEnabled() &&
+    !input.skipGoogleSearch;
 
   const { system, user } = buildVerificationPrompt({
     ...input,

@@ -7,8 +7,13 @@ function sleep(ms: number): Promise<void> {
 let queue: Promise<void> = Promise.resolve();
 
 /** Serialize Gemini calls and enforce minimum spacing (free tier ~20 RPM). */
-export async function withGeminiRateLimit<T>(fn: () => Promise<T>): Promise<T> {
-  const minInterval = Number(getServerEnv("GEMINI_MIN_REQUEST_INTERVAL_MS")) || 4500;
+export async function withGeminiRateLimit<T>(
+  fn: () => Promise<T>,
+  options?: { usesGoogleSearch?: boolean },
+): Promise<T> {
+  const searchInterval = Number(getServerEnv("GEMINI_MIN_REQUEST_INTERVAL_MS")) || 4500;
+  const jsonInterval = Number(getServerEnv("GEMINI_JSON_MIN_REQUEST_INTERVAL_MS")) || 2200;
+  const minInterval = options?.usesGoogleSearch ? searchInterval : jsonInterval;
   const run = async (): Promise<T> => {
     await sleep(minInterval);
     return fn();

@@ -91,7 +91,7 @@ export async function geminiGenerateContent(options: {
       lastGeminiError = `All models failed. ${lastGeminiAttemptLog.join("; ")}`;
     }
     return null;
-  });
+  }, { usesGoogleSearch: !!options.useGoogleSearch });
 }
 
 async function geminiGenerateContentOnce(

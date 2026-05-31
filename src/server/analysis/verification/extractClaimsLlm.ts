@@ -11,7 +11,7 @@ interface ClaimsPayload {
 }
 
 const maxExtractedClaims = () =>
-  Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 8;
+  Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
 
 function parseClaims(raw: string, prefixId: string): ExtractedClaim[] | null {
   try {

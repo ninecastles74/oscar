@@ -19,4 +19,6 @@ export interface VerifyClaimApiInput {
   evidence: { stance: string; sourceName?: string; excerpt: string }[];
   role: "primary" | "review" | "corroboration";
   priorVerdict?: { verdict: Verdict; confidence: number; reasoning: string };
+  /** Skip a second Google Search round when live web evidence is already attached. */
+  skipGoogleSearch?: boolean;
 }

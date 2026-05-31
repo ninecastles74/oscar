@@ -4,10 +4,13 @@ import { isGoogleAiConfigured } from "../../ai/google-api-key";
 import { getServerEnv } from "../../env/server-env";
 import type { ClassifiedClaim } from "./types";
 
-/** Max claims to research per analysis (all are covered via batched + retry). */
-const MAX_TOTAL_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 8;
+/** Max claims to research per analysis (aligned with multi-model cap). */
+const MAX_TOTAL_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
 /** Claims per batched Google Search call (keeps JSON reliable on free tier). */
-const BATCH_SIZE = Number(getServerEnv("LIVE_EVIDENCE_BATCH_SIZE")) || 3;
+const BATCH_SIZE = Number(getServerEnv("LIVE_EVIDENCE_BATCH_SIZE")) || 5;
+/** Max per-claim retry calls after batching (avoids timeout on free tier). */
+const MAX_SINGLE_CLAIM_RETRIES =
+  Number(getServerEnv("LIVE_EVIDENCE_MAX_SINGLE_RETRIES")) || 2;
 
 interface BatchedEvidencePayload {
   claims?: Array<{
@@ -179,7 +182,7 @@ export async function retrieveEvidenceLive(
   }
 
   const missing = toResearch.filter((c) => !out[c.id]?.length);
-  for (const claim of missing) {
+  for (const claim of missing.slice(0, MAX_SINGLE_CLAIM_RETRIES)) {
     await researchSingleClaim(claim, out);
   }
 
