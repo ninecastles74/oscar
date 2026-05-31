@@ -10,10 +10,14 @@ interface ClaimsPayload {
   claims?: { text: string }[];
 }
 
+const maxExtractedClaims = () =>
+  Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 8;
+
 function parseClaims(raw: string, prefixId: string): ExtractedClaim[] | null {
   try {
     const parsed = JSON.parse(raw) as ClaimsPayload;
-    const list = parsed.claims?.filter((c) => c.text?.trim()).slice(0, 12) ?? [];
+    const maxClaims = maxExtractedClaims();
+    const list = parsed.claims?.filter((c) => c.text?.trim()).slice(0, maxClaims) ?? [];
     if (list.length === 0) return null;
     return list.map((c, i) => ({
       id: `${prefixId}-claim-${i + 1}`,
@@ -24,7 +28,8 @@ function parseClaims(raw: string, prefixId: string): ExtractedClaim[] | null {
     if (!match) return null;
     try {
       const parsed = JSON.parse(match[0]) as ClaimsPayload;
-      const list = parsed.claims?.filter((c) => c.text?.trim()).slice(0, 12) ?? [];
+      const maxClaims = maxExtractedClaims();
+      const list = parsed.claims?.filter((c) => c.text?.trim()).slice(0, maxClaims) ?? [];
       if (list.length === 0) return null;
       return list.map((c, i) => ({
         id: `${prefixId}-claim-${i + 1}`,

@@ -70,8 +70,8 @@ export async function runVerificationPipeline(
     const detail = attempts.length ? attempts.join("; ") : hint;
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
-      `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s).${
-        detail ? ` ${detail}` : " Try GEMINI_VERIFICATION_MODEL=gemini-2.5-flash"
+      `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s). Missing: ${missingLive.map((c) => c.id).join(", ")}.${
+        detail ? ` ${detail}` : " Check Gemini quota or set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash"
       }`,
       503,
     );

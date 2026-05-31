@@ -1,11 +1,11 @@
 import { getServerEnv } from "../env/server-env";
 
-/** Default — lite uses separate free-tier pool on many accounts. */
-export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
+/** Default for verification + Google Search (reliable JSON on free tier). */
+export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 
 export const GEMINI_MODEL_FALLBACKS = [
-  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
   "gemini-3.5-flash",
   "gemini-2.0-flash-001",
 ] as const;
