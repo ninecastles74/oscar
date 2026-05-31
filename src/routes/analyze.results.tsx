@@ -13,7 +13,8 @@ const searchSchema = z.object({
   id: z.string().min(1),
 });
 
-const STALE_MS = 4 * 60 * 1000;
+const STALE_MS = 90 * 1000;
+const NOT_FOUND_GRACE_MS = 15 * 1000;
 
 type ClientSnapshot = {
   report: AnalysisReport;
@@ -37,7 +38,12 @@ export const Route = createFileRoute("/analyze/results")({
 
     if ("error" in result && result.error && typeof result.error === "object") {
       if ("code" in result.error && result.error.code === "NOT_FOUND") {
-        return { pending: true, requestId: deps.requestId, status: "processing" as const };
+        return {
+          pending: true,
+          requestId: deps.requestId,
+          status: "processing" as const,
+          notFound: true as const,
+        };
       }
       return { error: result.error, requestId: deps.requestId };
     }
@@ -84,6 +90,7 @@ function AnalyzeResultsPage() {
   const router = useRouter();
   const requestId = "requestId" in data ? data.requestId : "";
   const [clientSnapshot, setClientSnapshot] = useState<ClientSnapshot | null>(null);
+  const [pollStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
     if (!requestId || typeof window === "undefined") return;
@@ -98,19 +105,31 @@ function AnalyzeResultsPage() {
 
   const isPending = "pending" in data && data.pending;
   const isFailed = ("failed" in data && data.failed) || false;
+  const notFoundLost =
+    isPending &&
+    "notFound" in data &&
+    data.notFound &&
+    !clientSnapshot &&
+    Date.now() - pollStartedAt > NOT_FOUND_GRACE_MS;
   const stale =
     isPending &&
+    !notFoundLost &&
     "startedAt" in data &&
     typeof data.startedAt === "string" &&
     Date.now() - new Date(data.startedAt).getTime() > STALE_MS;
+  const staleWithoutStartedAt =
+    isPending &&
+    !notFoundLost &&
+    !("startedAt" in data && typeof data.startedAt === "string") &&
+    Date.now() - pollStartedAt > STALE_MS;
 
   useEffect(() => {
-    if (!isPending || isFailed || stale || clientSnapshot) return;
+    if (!isPending || isFailed || stale || staleWithoutStartedAt || notFoundLost || clientSnapshot) return;
     const timer = setInterval(() => {
       void router.invalidate();
     }, 2000);
     return () => clearInterval(timer);
-  }, [isPending, isFailed, stale, clientSnapshot, router]);
+  }, [isPending, isFailed, stale, staleWithoutStartedAt, notFoundLost, clientSnapshot, router]);
 
   if (clientSnapshot?.report) {
     const aiDiag = "aiDiagnostics" in data ? data.aiDiagnostics : undefined;
@@ -144,13 +163,15 @@ function AnalyzeResultsPage() {
     );
   }
 
-  if (isFailed || stale) {
+  if (isFailed || stale || staleWithoutStartedAt || notFoundLost) {
     const msg =
-      isFailed && "errorMessage" in data && typeof data.errorMessage === "string"
-        ? data.errorMessage
-        : stale
-          ? "Analysis timed out. Enable FEED_KV on the oscar Worker for reliable background jobs, or retry with a shorter article."
-          : "Analysis could not be completed.";
+      notFoundLost
+        ? "Analysis session was lost between requests. Enable FEED_KV on the oscar Worker (see wrangler.jsonc), redeploy, and run Ask Oscar again."
+        : isFailed && "errorMessage" in data && typeof data.errorMessage === "string"
+          ? data.errorMessage
+          : stale || staleWithoutStartedAt
+            ? "Analysis timed out. Enable FEED_KV on the oscar Worker for reliable background jobs, or retry with a shorter article."
+            : "Analysis could not be completed.";
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
         <h1 className="text-xl font-semibold">Analysis failed</h1>
@@ -172,7 +193,7 @@ function AnalyzeResultsPage() {
           {typeof data.progress === "number" ? ` · ${data.progress}%` : ""}
         </p>
         <p className="mt-4 text-xs text-muted-foreground">
-          This page refreshes automatically. Live AI can take 1–2 minutes on the free Gemini tier.
+          This page refreshes automatically. Live AI usually finishes within 1–3 minutes.
         </p>
       </main>
     );

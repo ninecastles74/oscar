@@ -22,6 +22,7 @@ import { buildFinalIntelligenceReport } from "../orchestration/build-final-intel
 import type { ArticleOrchestrationReport } from "../orchestration/types";
 import type { ManualAnalysisResponse, ParsedArticleInput, PipelineArticleContext } from "./types";
 import { fetchArticleFromUrl } from "./url-fetch";
+import { getServerEnv } from "../env/server-env";
 import {
   loadManualRequest,
   loadManualSubmission,
@@ -30,6 +31,9 @@ import {
   syncManualRequest,
   syncManualSubmission,
 } from "./manual-persist";
+
+const MANUAL_ANALYSIS_WALL_MS =
+  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 3 * 60 * 1000;
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
@@ -145,6 +149,45 @@ export async function executeManualAnalysis(
     analysisTrigger: "user",
   };
 
+  const failRequest = async (message: string) => {
+    submission.status = "failed";
+    submission.error = message;
+    request.status = "failed";
+    request.error = message;
+    request.completedAt = new Date().toISOString();
+    await syncManualSubmission(submission);
+    await syncManualRequest(request);
+    console.error("[executeManualAnalysis]", message);
+  };
+
+  let wallTimer: ReturnType<typeof setTimeout> | undefined;
+  const wallTimeout = new Promise<never>((_, reject) => {
+    wallTimer = setTimeout(() => {
+      reject(
+        new AnalysisError(
+          "ANALYSIS_TIMEOUT",
+          `Analysis timed out after ${Math.round(MANUAL_ANALYSIS_WALL_MS / 1000)}s. Try a shorter article or reduce LIVE_EVIDENCE_MAX_CLAIMS.`,
+        ),
+      );
+    }, MANUAL_ANALYSIS_WALL_MS);
+  });
+
+  try {
+    await Promise.race([runManualAnalysisPipeline(requestId, request, submission, input), wallTimeout]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Analysis failed";
+    await failRequest(message);
+  } finally {
+    if (wallTimer) clearTimeout(wallTimer);
+  }
+}
+
+async function runManualAnalysisPipeline(
+  requestId: string,
+  request: UserAnalysisRequest,
+  submission: ManualSubmission,
+  input: BeginManualAnalysisInput,
+): Promise<void> {
   const hasUrl = !!input.url?.trim();
   const hasText = !!input.text?.trim();
   const submissionId = submission.id;
@@ -262,6 +305,7 @@ export async function executeManualAnalysis(
     await syncManualSubmission(submission);
     await syncManualRequest(request);
     console.error("[executeManualAnalysis]", message);
+    throw err;
   }
 }
 

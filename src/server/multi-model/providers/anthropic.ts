@@ -13,8 +13,8 @@ function anthropicKey(): string | undefined {
   return getServerEnv("ANTHROPIC_API_KEY");
 }
 
-const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 20_000;
-const MAX_429_RETRIES = Number(getServerEnv("ANTHROPIC_429_MAX_RETRIES")) || 3;
+const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 15_000;
+const MAX_429_RETRIES = Number(getServerEnv("ANTHROPIC_429_MAX_RETRIES")) || 1;
 
 const VALID_VERDICTS = new Set<Verdict>([
   "supported",
@@ -68,11 +68,19 @@ function extractJsonVerdict(raw: string, prefilledBrace = false): LlmVerdictPayl
 }
 
 function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 529 || status === 503;
+  return status === 429 || status === 529;
 }
 
 function isModelErrorStatus(status: number): boolean {
   return status === 404 || status === 400;
+}
+
+function isAuthErrorStatus(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
 }
 
 export async function verifyClaimWithAnthropic(
@@ -107,7 +115,7 @@ export async function verifyClaimWithAnthropic(
             },
             body: JSON.stringify({
               model,
-              max_tokens: 1024,
+              max_tokens: 512,
               temperature: 0,
               system: `${system}\n\nRespond with one JSON object only. No markdown fences.`,
               messages: [
@@ -122,8 +130,12 @@ export async function verifyClaimWithAnthropic(
         if (!res.ok) {
           const errBody = await res.text().catch(() => "");
           lastAttemptError = `${model}: HTTP ${res.status}${errBody ? ` — ${errBody.slice(0, 240)}` : ""}`;
+          if (isAuthErrorStatus(res.status)) {
+            lastAnthropicError = lastAttemptError;
+            return null;
+          }
           if (isRetryableStatus(res.status) && attempt < MAX_429_RETRIES) {
-            await sleep(1500 * (attempt + 1));
+            await sleep(2000);
             continue;
           }
           if (isModelErrorStatus(res.status)) break;
@@ -133,7 +145,6 @@ export async function verifyClaimWithAnthropic(
 
         const data = (await res.json()) as {
           content?: { type: string; text?: string }[];
-          stop_reason?: string;
         };
         const raw = data.content?.find((c) => c.type === "text")?.text;
         if (!raw) {
@@ -156,11 +167,11 @@ export async function verifyClaimWithAnthropic(
           reasoning: parsed.reasoning.slice(0, 500),
         };
       } catch (err) {
-        lastAttemptError = `${model}: ${err instanceof Error ? err.message : "request failed"}`;
-        if (attempt < MAX_429_RETRIES) {
-          await sleep(1000 * (attempt + 1));
-          continue;
+        if (isAbortError(err)) {
+          lastAttemptError = `${model}: timed out after ${LLM_TIMEOUT_MS}ms`;
+          break;
         }
+        lastAttemptError = `${model}: ${err instanceof Error ? err.message : "request failed"}`;
         break;
       }
     }

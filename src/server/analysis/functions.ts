@@ -131,6 +131,20 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
   const status = mapAnalysisStatus(done?.status);
   const full = status === "completed" ? await getManualAnalysisResult(requestId) : null;
 
+  if (status === "completed" && !full) {
+    return {
+      requestId,
+      submissionId,
+      status: "failed" as const,
+      failedMessage:
+        done?.error ??
+        "Analysis finished but results could not be loaded. Enable FEED_KV on the oscar Worker for reliable Ask Oscar.",
+      quota,
+      envKeysDetected: apiKeys,
+      kvConfigured: false,
+    };
+  }
+
   return {
     requestId,
     submissionId,
@@ -204,6 +218,16 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
         requestId: status.id,
         status: "failed" as const,
         errorMessage: status.error ?? "Analysis failed",
+        request: status,
+      };
+    }
+
+    if (status.status === "completed") {
+      return {
+        requestId: status.id,
+        status: "failed" as const,
+        errorMessage:
+          "Analysis finished but the report could not be loaded. Enable FEED_KV on the oscar Worker for reliable results, then retry.",
         request: status,
       };
     }
