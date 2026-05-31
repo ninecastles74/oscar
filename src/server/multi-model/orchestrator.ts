@@ -22,7 +22,7 @@ import {
 import { isGeminiGoogleSearchEnabled, isGoogleAiConfigured } from "../ai/google-api-key";
 import { buildMultiModelConsensus, toClaimVerification } from "./consensus";
 import { providersInvolved } from "./disagreement";
-import { verifyClaimWithAnthropic } from "./providers/anthropic";
+import { getLastAnthropicError, verifyClaimWithAnthropic } from "./providers/anthropic";
 import { verifyClaimWithGemini } from "./providers/gemini";
 import { verifyClaimWithOpenAI } from "./providers/openai";
 import type { ModelClaimVerdict } from "@/types/news-platform";
@@ -97,7 +97,10 @@ async function verifyOneClaim(
         priorVerdict: primary,
       });
       if (!review) {
-        liveAiError(`Anthropic review failed for claim "${claim.text.slice(0, 80)}…"`);
+        const err = getLastAnthropicError();
+        liveAiError(
+          `Anthropic review failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
+        );
       }
     } else if (isGeminiLiveEnabled()) {
       stages.push("gemini_review");
