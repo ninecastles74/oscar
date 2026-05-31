@@ -1,15 +1,26 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { ReportView } from "@/features/reports/report-view";
 import { getAiDiagnostics, getManualAnalysis } from "@/server/analysis/functions";
 import { OSCAR, pageTitle } from "@/lib/brand";
+import type { AnalysisReport, FinalIntelligenceSummary } from "@/types/news-platform";
+import type { ManualSubmission } from "@/types/news-platform";
 
 const searchSchema = z.object({
   id: z.string().min(1),
 });
+
+const STALE_MS = 4 * 60 * 1000;
+
+type ClientSnapshot = {
+  report: AnalysisReport;
+  reliability?: unknown;
+  finalIntelligence?: FinalIntelligenceSummary;
+  submission?: ManualSubmission;
+};
 
 export const Route = createFileRoute("/analyze/results")({
   validateSearch: searchSchema,
@@ -31,13 +42,26 @@ export const Route = createFileRoute("/analyze/results")({
       return { error: result.error, requestId: deps.requestId };
     }
 
+    if ("status" in result && result.status === "failed") {
+      return {
+        failed: true,
+        requestId: deps.requestId,
+        errorMessage:
+          "errorMessage" in result && typeof result.errorMessage === "string"
+            ? result.errorMessage
+            : "Analysis failed",
+        aiDiagnostics,
+      };
+    }
+
     if (!result.report) {
       return {
         pending: true,
         requestId: deps.requestId,
         status: result.status ?? "processing",
         progress: "progress" in result ? result.progress : undefined,
-        errorMessage: "error" in result ? result.error : undefined,
+        startedAt: "startedAt" in result ? result.startedAt : undefined,
+        aiDiagnostics,
       };
     }
 
@@ -58,32 +82,80 @@ export const Route = createFileRoute("/analyze/results")({
 function AnalyzeResultsPage() {
   const data = Route.useLoaderData();
   const router = useRouter();
-
-  const isPending = "pending" in data && data.pending;
-  const isFailed =
-    isPending &&
-    (data.status === "failed" ||
-      (typeof data.errorMessage === "string" && data.errorMessage.length > 0));
+  const requestId = "requestId" in data ? data.requestId : "";
+  const [clientSnapshot, setClientSnapshot] = useState<ClientSnapshot | null>(null);
 
   useEffect(() => {
-    if (!isPending || isFailed) return;
+    if (!requestId || typeof window === "undefined") return;
+    const raw = sessionStorage.getItem(`oscar-manual-${requestId}`);
+    if (!raw) return;
+    try {
+      setClientSnapshot(JSON.parse(raw) as ClientSnapshot);
+    } catch {
+      /* ignore */
+    }
+  }, [requestId]);
+
+  const isPending = "pending" in data && data.pending;
+  const isFailed = ("failed" in data && data.failed) || false;
+  const stale =
+    isPending &&
+    "startedAt" in data &&
+    typeof data.startedAt === "string" &&
+    Date.now() - new Date(data.startedAt).getTime() > STALE_MS;
+
+  useEffect(() => {
+    if (!isPending || isFailed || stale || clientSnapshot) return;
     const timer = setInterval(() => {
       void router.invalidate();
     }, 2000);
     return () => clearInterval(timer);
-  }, [isPending, isFailed, router]);
+  }, [isPending, isFailed, stale, clientSnapshot, router]);
+
+  if (clientSnapshot?.report) {
+    const aiDiag = "aiDiagnostics" in data ? data.aiDiagnostics : undefined;
+    return (
+      <>
+        {aiDiag && typeof aiDiag === "object" && !("error" in aiDiag) && (
+          <div className="mx-auto max-w-6xl px-6 pt-4">
+            <p className="text-xs text-muted-foreground">Loaded from this browser session.</p>
+          </div>
+        )}
+        <ReportView
+          report={analysisReportToManualReport(clientSnapshot.report)}
+          platformReport={clientSnapshot.report}
+          finalIntelligence={clientSnapshot.finalIntelligence}
+        />
+      </>
+    );
+  }
 
   if ("error" in data && data.error && !isPending) {
     const errCode = "code" in data.error ? String(data.error.code) : "";
     const isLiveRequired = errCode === "LIVE_AI_REQUIRED";
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
-        <h1 className="font-serif text-2xl font-semibold">Analysis failed</h1>
+        <h1 className="text-xl font-semibold">{isLiveRequired ? "Live AI required" : "Analysis failed"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{data.error.message}</p>
-        <Link
-          to="/analyze"
-          className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
-        >
+        <Link to="/analyze" className="mt-6 inline-block text-sm text-accent hover:underline">
+          Try again
+        </Link>
+      </main>
+    );
+  }
+
+  if (isFailed || stale) {
+    const msg =
+      isFailed && "errorMessage" in data && typeof data.errorMessage === "string"
+        ? data.errorMessage
+        : stale
+          ? "Analysis timed out. Enable FEED_KV on the oscar Worker for reliable background jobs, or retry with a shorter article."
+          : "Analysis could not be completed.";
+    return (
+      <main className="mx-auto max-w-lg px-6 py-20 text-center">
+        <h1 className="text-xl font-semibold">Analysis failed</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{msg}</p>
+        <Link to="/analyze" className="mt-6 inline-block text-sm text-accent hover:underline">
           Try again
         </Link>
       </main>
@@ -91,36 +163,16 @@ function AnalyzeResultsPage() {
   }
 
   if (isPending) {
-    if (isFailed) {
-      const msg =
-        typeof data.errorMessage === "string"
-          ? data.errorMessage
-          : "Analysis could not be completed.";
-      return (
-        <main className="mx-auto max-w-lg px-6 py-20 text-center">
-          <h1 className="font-serif text-2xl font-semibold">Analysis failed</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{msg}</p>
-          <Link
-            to="/analyze"
-            className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
-          >
-            Try again
-          </Link>
-        </main>
-      );
-    }
-
     return (
-      <main className="mx-auto max-w-lg px-6 py-20 text-center">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-        <h1 className="mt-4 font-serif text-2xl font-semibold">Running analysis</h1>
+      <main className="mx-auto flex max-w-lg flex-col items-center px-6 py-24 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+        <h1 className="mt-4 text-xl font-semibold">Running analysis</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Status: {data.status ?? "processing"}
           {typeof data.progress === "number" ? ` · ${data.progress}%` : ""}
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          This page refreshes automatically. URL articles use metadata and excerpts; paste full text
-          for deeper checks.
+        <p className="mt-4 text-xs text-muted-foreground">
+          This page refreshes automatically. Live AI can take 1–2 minutes on the free Gemini tier.
         </p>
       </main>
     );
@@ -135,32 +187,22 @@ function AnalyzeResultsPage() {
   return (
     <>
       {aiDiag && typeof aiDiag === "object" && !("error" in aiDiag) && (
-        <div className="mb-4 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <p className="font-medium">Server AI diagnostics (live)</p>
+        <div className="mx-auto max-w-6xl border-b bg-secondary/20 px-6 py-3 text-xs">
+          <p className="font-semibold">Server AI diagnostics (live)</p>
           <p className="text-muted-foreground">
             Google key detected: {aiDiag.googleKeyDetected ? "yes" : "no"}
-            {aiDiag.geminiKeyLength ? ` (${aiDiag.geminiKeyLength} chars)` : ""}
             {" · "}Configured: {(aiDiag.detectedAiEnvKeys ?? []).join(", ") || "none"}
           </p>
-          {"secretBindings" in aiDiag && Array.isArray(aiDiag.secretBindings) && (
-            <ul className="mt-2 text-xs text-muted-foreground list-disc pl-4">
-              {(aiDiag.secretBindings as { key: string; status: string; valueLength?: number }[])
-                .filter((b) => /API_KEY|GEMINI|OPENAI|ANTHROPIC|GOOGLE/i.test(b.key))
-                .map((b) => (
-                  <li key={b.key}>
-                    {b.key}: {b.status === "ok" ? `ok (${b.valueLength ?? "?"} chars)` : b.status}
-                  </li>
-                ))}
-            </ul>
+          {aiDiag.likelyOfflineReason && (
+            <p className="mt-1 text-muted-foreground">{aiDiag.likelyOfflineReason}</p>
           )}
-          <p className="text-muted-foreground text-xs mt-1">{aiDiag.likelyOfflineReason}</p>
         </div>
       )}
       <ReportView
         report={data.report}
-        platformReport={"platformReport" in data ? data.platformReport : undefined}
-        explainability={"explainability" in data ? data.explainability : undefined}
-        finalIntelligence={"finalIntelligence" in data ? data.finalIntelligence : undefined}
+        platformReport={data.platformReport}
+        explainability={data.explainability}
+        finalIntelligence={data.finalIntelligence}
       />
     </>
   );

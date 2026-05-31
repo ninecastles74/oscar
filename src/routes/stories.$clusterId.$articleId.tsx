@@ -1,4 +1,6 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { ReportView } from "@/features/reports/report-view";
 import { loadFeedArticleAnalysis } from "@/server/consensus/functions";
 import { OSCAR, pageTitle } from "@/lib/brand";
@@ -9,6 +11,15 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
     const result = await loadFeedArticleAnalysis({
       data: { clusterId: params.clusterId, articleId: params.articleId },
     });
+
+    if (result && "pendingAnalysis" in result && result.pendingAnalysis) {
+      return {
+        pendingAnalysis: true as const,
+        clusterId: params.clusterId,
+        title: result.title ?? "Article",
+        message: result.message,
+      };
+    }
 
     if (result && "error" in result && result.error) {
       if (result.error.code === "NOT_FOUND") throw notFound();
@@ -36,6 +47,32 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
 
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!("pendingAnalysis" in data) || !data.pendingAnalysis) return;
+    const timer = setInterval(() => void router.invalidate(), 2500);
+    return () => clearInterval(timer);
+  }, [data, router]);
+
+  if ("pendingAnalysis" in data && data.pendingAnalysis) {
+    return (
+      <main className="mx-auto flex max-w-lg flex-col items-center px-6 py-24 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+        <h1 className="mt-4 font-serif text-2xl font-semibold">{data.title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {data.message ?? "Running live Oscar analysis for this article…"}
+        </p>
+        <Link
+          to="/consensus/$clusterId"
+          params={{ clusterId: data.clusterId }}
+          className="mt-6 text-sm text-accent hover:underline"
+        >
+          Back to cluster analysis
+        </Link>
+      </main>
+    );
+  }
 
   if ("error" in data && data.error) {
     return (

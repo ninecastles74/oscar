@@ -56,17 +56,24 @@ export function CompareMatrixView({
                 </th>
                 {map.sources.map((s) => (
                   <th key={s.articleId} className="px-3 py-3 text-center">
-                    <SourceBadge
-                      source={{
-                        id: s.sourceId,
-                        name: s.sourceName,
-                        domain: s.sourceDomain,
-                        bias: "center",
-                        reliability: 70,
-                        approved: true,
-                      }}
-                      small
-                    />
+                    <Link
+                      to="/stories/$clusterId/$articleId"
+                      params={{ clusterId: cluster.id, articleId: s.articleId }}
+                      className="inline-flex hover:opacity-80"
+                      title={`Open ${OSCAR.analysis} for this article`}
+                    >
+                      <SourceBadge
+                        source={{
+                          id: s.sourceId,
+                          name: s.sourceName,
+                          domain: s.sourceDomain,
+                          bias: "center",
+                          reliability: 70,
+                          approved: true,
+                        }}
+                        small
+                      />
+                    </Link>
                   </th>
                 ))}
               </tr>

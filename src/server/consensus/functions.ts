@@ -27,6 +27,7 @@ import { buildFullExplainabilityBundle } from "../reliability/explainability/bui
 import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
 import { buildStoryScoreExplainability } from "../transparency-explainability/build-story-explainability";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
+import { runInWorkerBackground } from "../news/worker-env";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
 
@@ -174,7 +175,15 @@ async function ensureFeedConsensusReport(
   return report;
 }
 
-/** Live Top 100 cluster: return or build Oscar consensus analysis for the story. */
+function kickFeedConsensusBackground(cluster: StoryCluster, articles: NewsArticle[]): void {
+  runInWorkerBackground(
+    ensureFeedConsensusReport(cluster, articles).catch((err) => {
+      console.error("[consensus] background analysis failed:", err instanceof Error ? err.message : err);
+    }),
+  );
+}
+
+/** Live Top 100 cluster: return cached report quickly; refresh in background when needed. */
 export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => clusterIdSchema.parse(data))
   .handler(async ({ data }) => {
@@ -192,14 +201,28 @@ export const loadFeedClusterConsensus = createServerFn({ method: "GET" })
         cluster,
       };
     }
-    try {
-      const report = await ensureFeedConsensusReport(cluster, articles);
-      const storyExplainability = buildStoryScoreExplainability(report);
-      return { report, cluster, storyExplainability };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Consensus analysis failed";
-      return { error: { code: "CONSENSUS_FAILED", message }, cluster };
+
+    ensureWorkerEnvFromPlatform();
+    const cached = getStoryConsensus(data.clusterId);
+    if (cached) {
+      syncStoryScoresToArticlePages(articles, cached);
+      if (clusterArticlesNeedAiRefresh(articles)) {
+        kickFeedConsensusBackground(cluster, articles);
+      }
+      return {
+        report: cached,
+        cluster,
+        storyExplainability: buildStoryScoreExplainability(cached),
+        refreshing: clusterArticlesNeedAiRefresh(articles),
+      };
     }
+
+    kickFeedConsensusBackground(cluster, articles);
+    return {
+      pendingAnalysis: true as const,
+      cluster,
+      message: "Running live Oscar analysis for this story…",
+    };
   });
 
 /** Single feed article: return or build full Oscar analysis report. */
@@ -231,7 +254,24 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     const key = article.id || stableArticleId(article.url);
     let bundle = getArticleBundle(key);
     if (!bundle) {
-      bundle = await analyzeArticleHeavyweight(article);
+      kickFeedConsensusBackground(cluster, articles);
+      runInWorkerBackground(
+        analyzeArticleHeavyweight(article)
+          .then(() => persistFeedToKv())
+          .catch((err) => {
+            console.error(
+              "[loadFeedArticleAnalysis] background failed:",
+              err instanceof Error ? err.message : err,
+            );
+          }),
+      );
+      return {
+        pendingAnalysis: true as const,
+        clusterId: data.clusterId,
+        articleId: key,
+        title: article.title,
+        message: "Running live Oscar analysis for this article…",
+      };
     }
 
     let storyReport = getStoryConsensus(data.clusterId);

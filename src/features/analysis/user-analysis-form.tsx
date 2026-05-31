@@ -84,6 +84,26 @@ export function UserAnalysisForm({
         return;
       }
 
+      if (
+        "analysisSnapshot" in result &&
+        result.analysisSnapshot &&
+        typeof window !== "undefined"
+      ) {
+        sessionStorage.setItem(
+          `oscar-manual-${requestId}`,
+          JSON.stringify(result.analysisSnapshot),
+        );
+      }
+
+      if ("status" in result && result.status === "failed") {
+        setError(
+          ("failedMessage" in result && typeof result.failedMessage === "string"
+            ? result.failedMessage
+            : null) ?? "Analysis failed",
+        );
+        return;
+      }
+
       await goToResults(requestId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");

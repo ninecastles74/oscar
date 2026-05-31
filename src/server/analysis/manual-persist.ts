@@ -1,5 +1,5 @@
 import type { ManualSubmission, UserAnalysisRequest } from "@/types/news-platform";
-import { getFeedKv } from "../news/worker-env";
+import { getFeedKv, isFeedKvConfigured } from "../news/worker-env";
 import {
   getRequest,
   getSubmission,
@@ -33,34 +33,46 @@ async function kvGet<T>(key: string): Promise<T | null> {
   }
 }
 
-export function persistManualRequest(request: UserAnalysisRequest): void {
-  saveRequest(request);
-  void kvPut(`req:${request.id}`, request);
+export function isManualAnalysisKvConfigured(): boolean {
+  return isFeedKvConfigured();
 }
 
-export function persistManualSubmission(submission: ManualSubmission): void {
+export async function persistManualRequest(request: UserAnalysisRequest): Promise<void> {
+  saveRequest(request);
+  await kvPut(`req:${request.id}`, request);
+}
+
+export async function persistManualSubmission(submission: ManualSubmission): Promise<void> {
   saveSubmission(submission);
-  void kvPut(`sub:${submission.id}`, submission);
+  await kvPut(`sub:${submission.id}`, submission);
 }
 
 export async function loadManualRequest(requestId: string): Promise<UserAnalysisRequest | undefined> {
-  return getRequest(requestId) ?? (await kvGet<UserAnalysisRequest>(`req:${requestId}`)) ?? undefined;
+  const fromKv = await kvGet<UserAnalysisRequest>(`req:${requestId}`);
+  if (fromKv) {
+    saveRequest(fromKv);
+    return fromKv;
+  }
+  return getRequest(requestId);
 }
 
 export async function loadManualSubmission(
   submissionId: string,
 ): Promise<ManualSubmission | undefined> {
-  return (
-    getSubmission(submissionId) ?? (await kvGet<ManualSubmission>(`sub:${submissionId}`)) ?? undefined
-  );
+  const fromKv = await kvGet<ManualSubmission>(`sub:${submissionId}`);
+  if (fromKv) {
+    saveSubmission(fromKv);
+    return fromKv;
+  }
+  return getSubmission(submissionId);
 }
 
-export function syncManualRequest(request: UserAnalysisRequest): void {
+export async function syncManualRequest(request: UserAnalysisRequest): Promise<void> {
   updateRequest(request);
-  void kvPut(`req:${request.id}`, request);
+  await kvPut(`req:${request.id}`, request);
 }
 
-export function syncManualSubmission(submission: ManualSubmission): void {
+export async function syncManualSubmission(submission: ManualSubmission): Promise<void> {
   updateSubmission(submission);
-  void kvPut(`sub:${submission.id}`, submission);
+  await kvPut(`sub:${submission.id}`, submission);
 }

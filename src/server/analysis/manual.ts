@@ -70,7 +70,7 @@ export interface BeginManualAnalysisInput {
 }
 
 /** Create a processing request (persisted to KV when configured). */
-export function beginManualAnalysis(input: BeginManualAnalysisInput): {
+export async function beginManualAnalysis(input: BeginManualAnalysisInput): {
   requestId: string;
   submissionId: string;
 } {
@@ -107,8 +107,8 @@ export function beginManualAnalysis(input: BeginManualAnalysisInput): {
     startedAt: submittedAt,
   };
 
-  persistManualSubmission(submission);
-  persistManualRequest(request);
+  await persistManualSubmission(submission);
+  await persistManualRequest(request);
 
   return { requestId, submissionId };
 }
@@ -152,7 +152,7 @@ export async function executeManualAnalysis(
   try {
     let parsed: ParsedArticleInput;
     request.progress = 15;
-    syncManualRequest(request);
+    await syncManualRequest(request);
 
     if (hasUrl) {
       parsed = await fetchArticleFromUrl(input.url!.trim());
@@ -175,7 +175,7 @@ export async function executeManualAnalysis(
     };
 
     request.progress = 35;
-    syncManualRequest(request);
+    await syncManualRequest(request);
 
     let bundle = await runVerificationPipeline(pipelineArticle);
       console.log(
@@ -205,8 +205,8 @@ export async function executeManualAnalysis(
     request.completedAt = new Date().toISOString();
     request.report = reportWithConsensus;
 
-    syncManualSubmission(submission);
-    syncManualRequest(request);
+    await syncManualSubmission(submission);
+    await syncManualRequest(request);
 
     if (process.env.FINAL_INTELLIGENCE_ON_MANUAL === "true") {
       const articleResult: ArticleOrchestrationReport = {
@@ -247,7 +247,7 @@ export async function executeManualAnalysis(
           intelligenceSummary: full.intelligenceSummary,
           computedAt: full.computedAt,
         };
-        syncManualRequest(request);
+        await syncManualRequest(request);
       } catch {
         /* best-effort */
       }
@@ -259,8 +259,8 @@ export async function executeManualAnalysis(
     request.status = "failed";
     request.error = message;
     request.completedAt = new Date().toISOString();
-    syncManualSubmission(submission);
-    syncManualRequest(request);
+    await syncManualSubmission(submission);
+    await syncManualRequest(request);
     console.error("[executeManualAnalysis]", message);
   }
 }

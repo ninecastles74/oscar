@@ -15,6 +15,7 @@ import {
 } from "../env/server-env";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { isGoogleAiConfigured } from "../ai/google-api-key";
+import { isManualAnalysisKvConfigured } from "./manual-persist";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -46,6 +47,12 @@ const submitSchema = z
 
 const idSchema = z.object({ requestId: z.string().min(1) });
 
+function mapAnalysisStatus(status: string | undefined): "completed" | "failed" | "processing" {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  return "processing";
+}
+
 async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
   const kind = "manual_article" as const;
   const actor = await resolveActor({
@@ -65,7 +72,7 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     };
   }
 
-  const { requestId, submissionId } = beginManualAnalysis({
+  const { requestId, submissionId } = await beginManualAnalysis({
     url: "url" in data ? data.url : undefined,
     text: data.text,
     title: data.title,
@@ -93,38 +100,59 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
       },
     };
   }
+
   const envSnapshot = captureWorkerEnvSnapshot();
   const apiKeys = listApiKeyEnvNames(envSnapshot);
-  console.log(
-    "[submitManualAnalysis] env keys detected:",
-    apiKeys.join(", ") || "(none)",
-  );
-
   const quota = await getQuotaStatus(actor);
+  const kvConfigured = isManualAnalysisKvConfigured();
 
-  try {
-    await executeManualAnalysis(requestId, envSnapshot);
-  } catch (err) {
-    console.error(
-      "[submitManualAnalysis] analysis failed:",
-      err instanceof Error ? err.message : err,
-    );
+  const runAnalysis = () =>
+    executeManualAnalysis(requestId, envSnapshot).catch((err) => {
+      console.error(
+        "[submitManualAnalysis] analysis failed:",
+        err instanceof Error ? err.message : err,
+      );
+    });
+
+  if (kvConfigured) {
+    runInWorkerBackground(runAnalysis());
+    return {
+      requestId,
+      submissionId,
+      status: "processing" as const,
+      quota,
+      envKeysDetected: apiKeys,
+      kvConfigured: true,
+    };
   }
 
+  await runAnalysis();
   const done = await getManualAnalysisStatus(requestId);
+  const status = mapAnalysisStatus(done?.status);
+  const full = status === "completed" ? await getManualAnalysisResult(requestId) : null;
+
   return {
     requestId,
     submissionId,
-    status: done?.status === "completed" ? ("completed" as const) : ("processing" as const),
+    status,
+    failedMessage: done?.error,
     quota,
     envKeysDetected: apiKeys,
+    kvConfigured: false,
+    analysisSnapshot: full
+      ? {
+          report: full.report,
+          reliability: full.reliability,
+          finalIntelligence: full.finalIntelligence,
+          submission: full.submission,
+        }
+      : undefined,
     envWarning: hasAnyAiApiKey(envSnapshot)
       ? undefined
       : "No API keys visible to this Worker. Add GEMINI_API_KEY as a Secret on the oscar worker, redeploy, then retry.",
   };
 }
 
-/** Submit URL or pasted text for manual claim verification (counts toward daily AI quota). */
 export const submitManualAnalysis = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => submitSchema.parse(data))
   .handler(async ({ data }) => {
@@ -144,7 +172,6 @@ export const submitManualAnalysis = createServerFn({ method: "POST" })
     }
   });
 
-/** Fetch a completed manual analysis by request id. */
 export const getManualAnalysis = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => idSchema.parse(data))
   .handler(async ({ data }) => {
@@ -172,16 +199,25 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
       return { error: { code: "NOT_FOUND", message: "Analysis request not found" } };
     }
 
+    if (status.status === "failed") {
+      return {
+        requestId: status.id,
+        status: "failed" as const,
+        errorMessage: status.error ?? "Analysis failed",
+        request: status,
+      };
+    }
+
     return {
       requestId: status.id,
       status: status.status,
       progress: status.progress,
       error: status.error,
       request: status,
+      startedAt: status.startedAt,
     };
   });
 
-/** Server AI wiring diagnostics (no secrets). */
 export const getAiDiagnostics = createServerFn({ method: "GET" }).handler(async () => {
   return getAiAnalysisDiagnostics();
 });
