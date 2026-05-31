@@ -1,6 +1,10 @@
 import { getLastAnthropicError, verifyClaimWithAnthropic } from "../multi-model/providers/anthropic";
-import { getGoogleAiApiKey } from "../ai/google-api-key";
-import { geminiGenerateContent } from "../ai/gemini-client";
+import {
+  getGoogleAiApiKey,
+  getGoogleAiApiKeyMeta,
+  getGoogleAiKeyInvalidHint,
+} from "../ai/google-api-key";
+import { geminiGenerateContent, getLastGeminiError } from "../ai/gemini-client";
 import { openAiChatCompletion } from "../ai/openai-client";
 import { resolveOpenAiTopicModel } from "../ai/openai-models";
 import { getServerEnv, isOpenAiConfigured, listApiKeyEnvNames, captureWorkerEnvSnapshot } from "../env/server-env";
@@ -10,21 +14,37 @@ export async function testAiConnections() {
   ensureWorkerEnvFromPlatform();
   const snap = captureWorkerEnvSnapshot();
   const keys = listApiKeyEnvNames(snap);
+  const keyMeta = getGoogleAiApiKeyMeta();
 
   const out: Record<string, unknown> = {
     detectedKeyNames: keys,
     geminiKeyPresent: !!getGoogleAiApiKey(),
+    geminiKeySource: keyMeta?.source,
+    geminiKeyLength: keyMeta?.key.length,
+    geminiKeyPrefix: keyMeta?.key.slice(0, 8),
     openaiKeyPresent: isOpenAiConfigured(),
     anthropicKeyPresent: !!getServerEnv("ANTHROPIC_API_KEY"),
   };
 
-  const gemini = await geminiGenerateContent({
+  const geminiJson = await geminiGenerateContent({
     user: 'Reply with JSON only: {"ok":true,"message":"gemini live"}',
     jsonMode: true,
   });
-  out.geminiLiveTest = gemini
-    ? { ok: true, model: gemini.model, tokens: gemini.totalTokens }
-    : { ok: false, error: "Gemini call failed — check key, model, and Worker logs" };
+  out.geminiJsonTest = geminiJson
+    ? { ok: true, model: geminiJson.model, tokens: geminiJson.totalTokens }
+    : { ok: false, error: getLastGeminiError() ?? "Gemini JSON test failed" };
+
+  const geminiSearch = await geminiGenerateContent({
+    user: "What is 2+2? One word answer.",
+    useGoogleSearch: true,
+  });
+  out.geminiSearchTest = geminiSearch
+    ? { ok: true, model: geminiSearch.model, searchQueries: geminiSearch.grounding?.webSearchQueries?.length ?? 0 }
+    : { ok: false, error: getLastGeminiError() ?? "Gemini Google Search test failed" };
+
+  if (!geminiJson && keyMeta) {
+    out.geminiKeyHelp = getGoogleAiKeyInvalidHint(keyMeta.source);
+  }
 
   if (isOpenAiConfigured()) {
     const raw = await openAiChatCompletion({

@@ -40,8 +40,11 @@ export function getGoogleAiApiKeyMeta(): { key: string; source: string } | undef
 export function getGoogleAiKeyInvalidHint(source?: string): string {
   return (
     `Google rejected the API key${source ? ` from ${source}` : ""}. ` +
-    "Create a new key at https://aistudio.google.com/apikey (not Google Maps/Cloud Console), " +
-    "save it as Cloudflare Secret GEMINI_API_KEY (value = AIza… only), delete other GOOGLE_* keys if unused, then redeploy."
+    "Fix: (1) Create a NEW key at https://aistudio.google.com/apikey — copy the full AIza… string (~39 chars). " +
+    "(2) Cloudflare → Workers → oscar → Settings → Secrets → Production (not Preview): delete GEMINI_API_KEY, re-add with Value = key only. " +
+    "(3) Remove any empty GEMINI_API_KEY Variable on the same worker. " +
+    "(4) In Google Cloud Console → Credentials → your key → set Application restrictions to None (server calls from Cloudflare need this). " +
+    "(5) Redeploy Oscar. Test locally: curl -s \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_KEY\" -H \"Content-Type: application/json\" -d '{\"contents\":[{\"parts\":[{\"text\":\"hi\"}]}]}'"
   );
 }
 
