@@ -1,4 +1,5 @@
 import { getLastGeminiError } from "../ai/gemini-client";
+import { getLastOpenAiError } from "../ai/openai-client";
 import { AnalysisError } from "../analysis/errors";
 import {
   hasAnyAiApiKey,
@@ -68,7 +69,10 @@ async function verifyOneClaim(
       role: "primary",
     });
     if (!primary) {
-      liveAiError(`OpenAI primary verification failed for claim "${claim.text.slice(0, 80)}…"`);
+      const err = getLastOpenAiError();
+      liveAiError(
+        `OpenAI primary verification failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
+      );
     }
   } else if (isGeminiLiveEnabled()) {
     stages.push("gemini_primary");

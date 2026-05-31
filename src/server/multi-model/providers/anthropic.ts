@@ -1,6 +1,7 @@
 import type { ModelClaimVerdict, Verdict } from "@/types/news-platform";
 import { env as cloudflareEnv } from "cloudflare:workers";
 import { anthropicModelCandidates } from "../../ai/anthropic-models";
+import { VERDICT_JSON_SCHEMA } from "../../ai/llm-schemas";
 import { getServerEnv } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 import { fetchWithTimeout } from "../../utils/fetch-timeout";
@@ -13,8 +14,9 @@ function anthropicKey(): string | undefined {
   return getServerEnv("ANTHROPIC_API_KEY");
 }
 
-const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 15_000;
+const LLM_TIMEOUT_MS = Number(getServerEnv("LLM_FETCH_TIMEOUT_MS")) || 20_000;
 const MAX_429_RETRIES = Number(getServerEnv("ANTHROPIC_429_MAX_RETRIES")) || 1;
+const ANTHROPIC_VERSION = "2023-06-01";
 
 const VALID_VERDICTS = new Set<Verdict>([
   "supported",
@@ -44,27 +46,32 @@ function normalizeVerdict(raw: unknown): Verdict | null {
   return null;
 }
 
-function extractJsonVerdict(raw: string, prefilledBrace = false): LlmVerdictPayload | null {
-  const candidates = prefilledBrace
-    ? [`{${raw}`, raw.startsWith("{") ? raw : `{${raw}`]
-    : [raw.trim(), raw.match(/\{[\s\S]*"verdict"[\s\S]*\}/)?.[0] ?? ""];
-
-  for (const text of candidates) {
-    if (!text) continue;
+function parseVerdictPayload(raw: string): LlmVerdictPayload | null {
+  try {
+    const parsed = JSON.parse(raw.trim()) as Partial<LlmVerdictPayload>;
+    const verdict = normalizeVerdict(parsed.verdict);
+    if (!verdict) return null;
+    return {
+      verdict,
+      confidence: Number(parsed.confidence) || 50,
+      reasoning: String(parsed.reasoning ?? ""),
+    };
+  } catch {
+    const match = raw.match(/\{[\s\S]*"verdict"[\s\S]*\}/);
+    if (!match) return null;
     try {
-      const parsed = JSON.parse(text) as Partial<LlmVerdictPayload>;
+      const parsed = JSON.parse(match[0]) as Partial<LlmVerdictPayload>;
       const verdict = normalizeVerdict(parsed.verdict);
-      if (!verdict) continue;
+      if (!verdict) return null;
       return {
         verdict,
         confidence: Number(parsed.confidence) || 50,
         reasoning: String(parsed.reasoning ?? ""),
       };
     } catch {
-      // try next candidate
+      return null;
     }
   }
-  return null;
 }
 
 function isRetryableStatus(status: number): boolean {
@@ -110,18 +117,21 @@ export async function verifyClaimWithAnthropic(
             method: "POST",
             headers: {
               "x-api-key": apiKey,
-              "anthropic-version": "2023-06-01",
+              "anthropic-version": ANTHROPIC_VERSION,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
               model,
-              max_tokens: 512,
+              max_tokens: 1024,
               temperature: 0,
-              system: `${system}\n\nRespond with one JSON object only. No markdown fences.`,
-              messages: [
-                { role: "user", content: user },
-                { role: "assistant", content: "{" },
-              ],
+              system,
+              messages: [{ role: "user", content: user }],
+              output_config: {
+                format: {
+                  type: "json_schema",
+                  schema: VERDICT_JSON_SCHEMA,
+                },
+              },
             }),
           },
           LLM_TIMEOUT_MS,
@@ -145,14 +155,15 @@ export async function verifyClaimWithAnthropic(
 
         const data = (await res.json()) as {
           content?: { type: string; text?: string }[];
+          stop_reason?: string;
         };
         const raw = data.content?.find((c) => c.type === "text")?.text;
         if (!raw) {
-          lastAttemptError = `${model}: empty response`;
+          lastAttemptError = `${model}: empty response (stop_reason=${data.stop_reason ?? "unknown"})`;
           break;
         }
 
-        const parsed = extractJsonVerdict(raw, true);
+        const parsed = parseVerdictPayload(raw);
         if (!parsed) {
           lastAttemptError = `${model}: invalid verdict JSON (${raw.slice(0, 120)})`;
           break;

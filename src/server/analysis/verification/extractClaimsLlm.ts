@@ -1,10 +1,10 @@
 import type { ExtractedClaim } from "./types";
-import { getGoogleAiApiKey } from "../../ai/google-api-key";
+import { geminiGenerateContent } from "../../ai/gemini-client";
+import { CLAIMS_JSON_SCHEMA } from "../../ai/llm-schemas";
+import { openAiChatCompletion } from "../../ai/openai-client";
+import { resolveOpenAiTopicModel } from "../../ai/openai-models";
 import { getServerEnv } from "../../env/server-env";
-import { fetchWithTimeout } from "../../utils/fetch-timeout";
-import { geminiVerificationModel } from "../../ai/google-api-key";
-
-const TIMEOUT_MS = 20_000;
+import { isOpenAiConfigured } from "../../env/server-env";
 
 interface ClaimsPayload {
   claims?: { text: string }[];
@@ -42,70 +42,34 @@ function parseClaims(raw: string, prefixId: string): ExtractedClaim[] | null {
 }
 
 async function extractWithOpenAI(articleText: string, prefixId: string): Promise<ExtractedClaim[] | null> {
-  const apiKey = getServerEnv("OPENAI_API_KEY") ?? getServerEnv("OPENAI_KEYS");
-  if (!apiKey) return null;
-  const model = getServerEnv("OPENAI_TOPIC_MODEL") ?? "gpt-4o-mini";
-  const system =
-    'Extract 5-10 factual, verifiable claims from the article. Return JSON only: {"claims":[{"text":"..."}]}';
-  try {
-    const res = await fetchWithTimeout(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          temperature: 0.1,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: articleText.slice(0, 12_000) },
-          ],
-        }),
-      },
-      TIMEOUT_MS,
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) return null;
-    return parseClaims(raw, prefixId);
-  } catch {
-    return null;
-  }
+  if (!isOpenAiConfigured()) return null;
+
+  const model = resolveOpenAiTopicModel();
+  const raw = await openAiChatCompletion({
+    model,
+    system:
+      "Extract 5-10 factual, verifiable claims from the article. Each claim must be a standalone sentence that can be fact-checked.",
+    user: articleText.slice(0, 12_000),
+    temperature: 0.1,
+    maxTokens: 2048,
+    jsonSchema: CLAIMS_JSON_SCHEMA,
+    jsonSchemaName: "extracted_claims",
+  });
+
+  if (!raw) return null;
+  return parseClaims(raw, prefixId);
 }
 
 async function extractWithGemini(articleText: string, prefixId: string): Promise<ExtractedClaim[] | null> {
-  const apiKey = getGoogleAiApiKey();
-  if (!apiKey) return null;
-  const model = geminiVerificationModel();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const prompt =
-    'Extract 5-10 factual, verifiable claims from this article. Return JSON only: {"claims":[{"text":"..."}]}\n\n' +
-    articleText.slice(0, 12_000);
-  try {
-    const res = await fetchWithTimeout(
-      url,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, responseMimeType: "application/json" },
-        }),
-      },
-      TIMEOUT_MS,
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") ?? "";
-    if (!raw) return null;
-    return parseClaims(raw, prefixId);
-  } catch {
-    return null;
-  }
+  const result = await geminiGenerateContent({
+    system:
+      "Extract 5-10 factual, verifiable claims from the article. Each claim must be a standalone sentence that can be fact-checked.",
+    user: articleText.slice(0, 12_000),
+    jsonMode: true,
+  });
+
+  if (!result?.text) return null;
+  return parseClaims(result.text, prefixId);
 }
 
 /** Live LLM claim extraction when OpenAI or Gemini is configured. */

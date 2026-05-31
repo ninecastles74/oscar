@@ -1,5 +1,9 @@
 import type { ContentTopic, TopicClassification } from "@/types/news-platform";
 import { CONTENT_TOPICS } from "@/types/news-platform";
+import { openAiChatCompletion } from "../../ai/openai-client";
+import { TOPICS_JSON_SCHEMA } from "../../ai/llm-schemas";
+import { resolveOpenAiTopicModel } from "../../ai/openai-models";
+import { isOpenAiConfigured } from "../../env/server-env";
 import { clampScore } from "../../reliability/utils/math";
 
 const VALID = new Set<string>(CONTENT_TOPICS);
@@ -10,7 +14,7 @@ interface LlmTopicPayload {
 }
 
 /**
- * Optional LLM topic classification when OPENAI_API_KEY or ANTHROPIC_API_KEY is set.
+ * Optional LLM topic classification when OPENAI_API_KEY is set.
  * Returns null to fall back to keyword classifier.
  */
 export async function classifyTopicsWithLlm(input: {
@@ -18,35 +22,24 @@ export async function classifyTopicsWithLlm(input: {
   summary?: string;
   body: string;
 }): Promise<TopicClassification | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
+  if (!isOpenAiConfigured()) return null;
 
   const text = [input.title, input.summary, input.body].filter(Boolean).join("\n").slice(0, 6000);
-  const system = `You classify news text into topics. Return JSON only: {"topics":[{"topic":"Politics","confidence":85},...],"primaryTopic":"Politics"}. Topics must be from: ${CONTENT_TOPICS.join(", ")}. Up to 4 topics, confidence 0-100.`;
+  const system = `You classify news text into topics. Topics must be from: ${CONTENT_TOPICS.join(", ")}. Up to 4 topics, confidence 0-100.`;
+
+  const raw = await openAiChatCompletion({
+    model: resolveOpenAiTopicModel(),
+    system,
+    user: text,
+    temperature: 0.1,
+    maxTokens: 512,
+    jsonSchema: TOPICS_JSON_SCHEMA,
+    jsonSchemaName: "topic_classification",
+  });
+
+  if (!raw) return null;
 
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_TOPIC_MODEL ?? "gpt-4o-mini",
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: text },
-        ],
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) return null;
-
     const parsed = JSON.parse(raw) as LlmTopicPayload;
     const topics = (parsed.topics ?? [])
       .filter((t) => VALID.has(t.topic))

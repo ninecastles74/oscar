@@ -115,6 +115,7 @@ async function geminiGenerateContentOnce(
     contents: [{ role: "user", parts: [{ text: options.user }] }],
     generationConfig: {
       temperature: 0.1,
+      maxOutputTokens: 2048,
       ...(options.useGoogleSearch || !options.jsonMode
         ? {}
         : { responseMimeType: "application/json" }),
@@ -143,10 +144,12 @@ async function geminiGenerateContentOnce(
       const data = (await res.json()) as {
         candidates?: Array<{
           content?: { parts?: Array<{ text?: string }> };
+          finishReason?: string;
           groundingMetadata?: GeminiGroundingMetadata;
         }>;
         usageMetadata?: { totalTokenCount?: number };
         error?: { message?: string };
+        promptFeedback?: { blockReason?: string };
       };
 
       if (res.status === 429 && attempt < MAX_429_RETRIES) {
@@ -165,7 +168,24 @@ async function geminiGenerateContentOnce(
         return null;
       }
 
+      if (data.promptFeedback?.blockReason) {
+        const msg = `${model}@${apiVersion}: blocked (${data.promptFeedback.blockReason})`;
+        lastGeminiAttemptLog.push(msg);
+        lastGeminiError = msg;
+        console.warn("[gemini-client]", msg);
+        return null;
+      }
+
       const candidate = data.candidates?.[0];
+      const finishReason = candidate?.finishReason;
+      if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
+        const msg = `${model}@${apiVersion}: finishReason=${finishReason}`;
+        lastGeminiAttemptLog.push(msg);
+        lastGeminiError = msg;
+        console.warn("[gemini-client]", msg);
+        return null;
+      }
+
       const text = candidate?.content?.parts?.map((p) => p.text).filter(Boolean).join("\n") ?? "";
       if (!text) {
         const msg = `${model}@${apiVersion}: empty response`;
