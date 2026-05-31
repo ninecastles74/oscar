@@ -1,4 +1,4 @@
-import { getGoogleAiApiKey, getGoogleAiKeySetupHint } from "./google-api-key";
+import { getGoogleAiApiKey, getGoogleAiKeyInvalidHint, getGoogleAiKeySetupHint, getGoogleAiApiKeyMeta } from "./google-api-key";
 import { geminiModelCandidates } from "./gemini-models";
 import { extractGoogleApiKey, sanitizeGoogleApiKeyOrUndefined } from "./sanitize-api-secret";
 import { parseRetryAfterSeconds, withGeminiRateLimit } from "./gemini-rate-limit";
@@ -81,6 +81,7 @@ export async function geminiGenerateContent(options: {
   timeoutMs?: number;
 }): Promise<GeminiGenerateResult | null> {
   const apiKey = getGoogleAiApiKey();
+  const keyMeta = getGoogleAiApiKeyMeta();
   if (!apiKey) {
     lastGeminiError = getGoogleAiKeySetupHint() ?? "No valid Gemini API key.";
     return null;
@@ -97,9 +98,11 @@ export async function geminiGenerateContent(options: {
 
     for (const model of models) {
       for (const apiVersion of apiVersions) {
-        const result = await geminiGenerateContentOnce(apiKey, model, apiVersion, options);
+        const result = await geminiGenerateContentOnce(apiKey, model, apiVersion, options, keyMeta?.source);
         if (result) return result;
+        if (lastGeminiError?.includes("Google rejected the API key")) break;
       }
+      if (lastGeminiError?.includes("Google rejected the API key")) break;
     }
 
     if (lastGeminiAttemptLog.some((m) => m.includes("HTTP 429"))) {
@@ -124,6 +127,7 @@ async function geminiGenerateContentOnce(
     jsonMode?: boolean;
     timeoutMs?: number;
   },
+  keySource?: string,
 ): Promise<GeminiGenerateResult | null> {
   const cleanedKey = sanitizeGoogleApiKeyOrUndefined(apiKey) ?? extractGoogleApiKey(apiKey);
   if (!cleanedKey) {
@@ -179,7 +183,13 @@ async function geminiGenerateContentOnce(
       }
 
       if (!res.ok) {
-        const msg = `${model}@${apiVersion}: HTTP ${res.status} ${data.error?.message ?? ""}`.trim();
+        const apiMsg = data.error?.message ?? "";
+        const invalidKey =
+          res.status === 400 &&
+          /api key not valid|API_KEY_INVALID|invalid api key/i.test(apiMsg);
+        const msg = invalidKey
+          ? `${model}@${apiVersion}: ${getGoogleAiKeyInvalidHint(keySource)}`
+          : `${model}@${apiVersion}: HTTP ${res.status} ${apiMsg}`.trim();
         lastGeminiAttemptLog.push(msg);
         lastGeminiError = msg;
         console.warn("[gemini-client]", msg);

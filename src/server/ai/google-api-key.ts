@@ -24,11 +24,25 @@ function readGoogleKey(name: string): string | undefined {
 
 /** Resolve Google AI / Gemini API key. */
 export function getGoogleAiApiKey(): string | undefined {
+  return getGoogleAiApiKeyMeta()?.key;
+}
+
+export function getGoogleAiApiKeyMeta(): { key: string; source: string } | undefined {
   for (const name of GEMINI_KEY_NAMES) {
     const v = readGoogleKey(name);
-    if (v) return v;
+    if (v) return { key: v, source: name };
   }
-  return sanitizeGoogleApiKeyOrUndefined(readRawKey("GOOGLE_API_KEY"));
+  const fromGoogleApi = sanitizeGoogleApiKeyOrUndefined(readRawKey("GOOGLE_API_KEY"));
+  if (fromGoogleApi) return { key: fromGoogleApi, source: "GOOGLE_API_KEY" };
+  return undefined;
+}
+
+export function getGoogleAiKeyInvalidHint(source?: string): string {
+  return (
+    `Google rejected the API key${source ? ` from ${source}` : ""}. ` +
+    "Create a new key at https://aistudio.google.com/apikey (not Google Maps/Cloud Console), " +
+    "save it as Cloudflare Secret GEMINI_API_KEY (value = AIza… only), delete other GOOGLE_* keys if unused, then redeploy."
+  );
 }
 
 export function getGoogleAiKeySetupHint(): string | undefined {

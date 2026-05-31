@@ -1,6 +1,6 @@
 import { auditSecretBindings, listDetectedAiEnvKeys, listMalformedEnvKeyAliases } from "../env/server-env";
 import { getMultiModelProviderStatus } from "../multi-model/provider-status";
-import { getGoogleAiApiKey, getGoogleAiKeySetupHint, isGoogleAiConfigured } from "../ai/google-api-key";
+import { getGoogleAiApiKey, getGoogleAiApiKeyMeta, getGoogleAiKeySetupHint, isGoogleAiConfigured } from "../ai/google-api-key";
 import { geminiGenerateContent, getLastGeminiError } from "../ai/gemini-client";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { getServerEnv } from "../env/server-env";
@@ -19,6 +19,7 @@ export async function getAiAnalysisDiagnostics() {
 
   const emptyBindings = secretAudit.filter((a) => a.status === "empty");
   const geminiKey = getGoogleAiApiKey();
+  const geminiKeyMeta = getGoogleAiApiKeyMeta();
   const geminiKeyHint = getGoogleAiKeySetupHint();
   let geminiSmokeTest: { ok: boolean; model?: string; error?: string } | undefined;
   if (geminiKey) {
@@ -62,7 +63,9 @@ export async function getAiAnalysisDiagnostics() {
     multiModelWouldRun: { user: isMultiModelEnabled("user"), scheduled: isMultiModelEnabled("scheduled") },
     googleConfigured: isGoogleAiConfigured(),
     googleKeyDetected: !!geminiKey,
+    geminiKeySource: geminiKeyMeta?.source,
     geminiKeyLength: geminiKey?.length,
+    geminiKeyPrefix: geminiKey?.slice(0, 8),
     detectedAiEnvKeys: configuredKeys,
     malformedKeyAliases,
     secretBindings: secretAudit,
