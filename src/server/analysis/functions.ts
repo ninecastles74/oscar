@@ -15,7 +15,8 @@ import {
 } from "../env/server-env";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import { isGoogleAiConfigured } from "../ai/google-api-key";
-import { isManualAnalysisKvConfigured } from "./manual-persist";
+import { isManualAnalysisKvConfigured, loadManualReliability } from "./manual-persist";
+import { getReliabilityBundleByArticleId } from "../reliability/engine";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
 import { getVerificationSnapshot } from "../reliability/snapshots";
 import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
@@ -60,6 +61,19 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     anonymousId: data.anonymousId,
   });
 
+  ensureWorkerEnvFromPlatform();
+
+  if (!isGoogleAiConfigured()) {
+    return {
+      error: {
+        code: "LIVE_AI_REQUIRED",
+        message:
+          "Live analysis requires GEMINI_API_KEY on the oscar Worker. Mock and offline reports are disabled.",
+        statusCode: 503,
+      },
+    };
+  }
+
   const gate = await assertAiAnalysisQuota(actor);
   if (!gate.allowed) {
     return {
@@ -87,19 +101,6 @@ async function runGatedUserAnalysis(data: z.infer<typeof submitSchema>) {
     kind,
     requestId,
   });
-
-  ensureWorkerEnvFromPlatform();
-
-  if (!isGoogleAiConfigured()) {
-    return {
-      error: {
-        code: "LIVE_AI_REQUIRED",
-        message:
-          "Live analysis requires GEMINI_API_KEY on the oscar Worker. Mock and offline reports are disabled.",
-        statusCode: 503,
-      },
-    };
-  }
 
   const envSnapshot = captureWorkerEnvSnapshot();
   const apiKeys = listApiKeyEnvNames(envSnapshot);
@@ -223,6 +224,31 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
     }
 
     if (status.status === "completed") {
+      const submission = status.submission;
+      const reliability =
+        (submission?.id ? getReliabilityBundleByArticleId(submission.id) : undefined) ??
+        getReliabilityBundleByArticleId(status.id) ??
+        status.reliability ??
+        (await loadManualReliability(status.id));
+
+      if (status.report && reliability) {
+        const explainability = buildFullExplainabilityBundle(
+          status.report,
+          reliability,
+          getVerificationSnapshot(status.id)?.results,
+        );
+        return {
+          requestId: status.id,
+          status: "completed" as const,
+          report: status.report,
+          submission,
+          request: status,
+          reliability,
+          explainability,
+          finalIntelligence: status.finalIntelligence,
+        };
+      }
+
       return {
         requestId: status.id,
         status: "failed" as const,

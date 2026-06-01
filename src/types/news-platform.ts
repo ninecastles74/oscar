@@ -1360,6 +1360,9 @@ export interface UserAnalysisRequest {
   /** Consolidated epistemic scores from the final intelligence layer. */
   finalIntelligence?: FinalIntelligenceSummary;
 
+  /** Reliability bundle (persisted to KV for cross-isolate polling). */
+  reliability?: ReliabilityScoreBundle;
+
   /** Error, if any. */
   error?: string;
 }

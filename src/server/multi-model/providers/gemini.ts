@@ -1,4 +1,5 @@
-import type { ModelClaimVerdict } from "@/types/news-platform";
+import type { ModelClaimVerdict, Verdict } from "@/types/news-platform";
+import { getLastGeminiError } from "../../ai/gemini-client";
 import { isGeminiGoogleSearchEnabled } from "../../ai/google-api-key";
 import { geminiGenerateContent } from "../../ai/gemini-client";
 import { clampScore } from "../../reliability/utils/math";
@@ -8,21 +9,46 @@ import type { LlmVerdictPayload, VerifyClaimApiInput } from "./types";
 
 const LLM_TIMEOUT_MS = Number(getServerEnv("GEMINI_FETCH_TIMEOUT_MS")) || 25_000;
 
-const VALID_VERDICTS = new Set(["supported", "disputed", "unclear", "insufficient_evidence"]);
+const VALID_VERDICTS = new Set<Verdict>([
+  "supported",
+  "disputed",
+  "unclear",
+  "insufficient_evidence",
+]);
+
+function normalizeVerdict(raw: unknown): Verdict | null {
+  if (typeof raw !== "string") return null;
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (VALID_VERDICTS.has(normalized as Verdict)) return normalized as Verdict;
+  if (normalized.includes("insufficient")) return "insufficient_evidence";
+  if (normalized.includes("disput")) return "disputed";
+  if (normalized.includes("support")) return "supported";
+  if (normalized.includes("unclear")) return "unclear";
+  return null;
+}
 
 function extractJsonVerdict(raw: string): LlmVerdictPayload | null {
   const trimmed = raw.trim();
-  try {
-    return JSON.parse(trimmed) as LlmVerdictPayload;
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*"verdict"[\s\S]*\}/);
-    if (!match) return null;
+  const candidates = [
+    trimmed,
+    trimmed.match(/\{[\s\S]*"verdict"[\s\S]*\}/)?.[0] ?? "",
+  ].filter(Boolean);
+
+  for (const text of candidates) {
     try {
-      return JSON.parse(match[0]) as LlmVerdictPayload;
+      const parsed = JSON.parse(text) as Partial<LlmVerdictPayload>;
+      const verdict = normalizeVerdict(parsed.verdict);
+      if (!verdict) continue;
+      return {
+        verdict,
+        confidence: Number(parsed.confidence) || 50,
+        reasoning: String(parsed.reasoning ?? ""),
+      };
     } catch {
-      return null;
+      // try next
     }
   }
+  return null;
 }
 
 function buildGeminiMeta(
@@ -47,7 +73,7 @@ function buildGeminiMeta(
   };
 }
 
-/** Gemini corroboration with optional Google Search grounding (real-time web). */
+/** Gemini verification/corroboration with optional Google Search grounding. */
 export async function verifyClaimWithGemini(
   input: VerifyClaimApiInput,
 ): Promise<ModelClaimVerdict | null> {
@@ -61,13 +87,14 @@ export async function verifyClaimWithGemini(
     evidenceSummary: formatEvidenceSummary(input.evidence),
   });
 
-  const userPrompt = useGoogleSearch
-    ? `${user}\n\nUse Google Search when the claim needs current public facts. End with a single JSON object only: {"verdict":"supported|disputed|unclear|insufficient_evidence","confidence":0-100,"reasoning":"..."}`
-    : user;
+  const jsonSuffix =
+    '\n\nRespond with ONLY one JSON object: {"verdict":"supported|disputed|unclear|insufficient_evidence","confidence":0-100,"reasoning":"..."}';
 
   const result = await geminiGenerateContent({
     system,
-    user: userPrompt,
+    user: useGoogleSearch
+      ? `${user}\n\nUse Google Search when needed.${jsonSuffix}`
+      : `${user}${jsonSuffix}`,
     useGoogleSearch,
     jsonMode: !useGoogleSearch,
     timeoutMs: LLM_TIMEOUT_MS,
@@ -76,7 +103,7 @@ export async function verifyClaimWithGemini(
   if (!result) return null;
 
   const parsed = extractJsonVerdict(result.text);
-  if (!parsed || !VALID_VERDICTS.has(parsed.verdict)) {
+  if (!parsed) {
     console.warn("[gemini] invalid verdict JSON:", result.text.slice(0, 120));
     return null;
   }
@@ -86,8 +113,12 @@ export async function verifyClaimWithGemini(
     model: result.model,
     role: input.role,
     verdict: parsed.verdict,
-    confidence: clampScore(Number(parsed.confidence) || 50),
-    reasoning: String(parsed.reasoning ?? "").slice(0, 500),
+    confidence: clampScore(parsed.confidence),
+    reasoning: parsed.reasoning.slice(0, 500),
     geminiMeta: buildGeminiMeta(result, useGoogleSearch),
   };
+}
+
+export function getGeminiVerificationError(): string | undefined {
+  return getLastGeminiError();
 }

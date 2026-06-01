@@ -10,6 +10,7 @@ import {
 import { saveFeedStateToKv } from "../../news/feed-persist";
 import { runHeavyweightClusterAnalysis } from "../../consensus/analyze-cluster-heavyweight";
 import { ensureWorkerEnvFromPlatform } from "../../env/ensure-worker-env";
+import { scheduledMaxClusters } from "../../analysis/context";
 
 export interface ScheduledNewsRunResult {
   success: boolean;
@@ -46,7 +47,9 @@ export async function runScheduledNewsPipeline(): Promise<ScheduledNewsRunResult
     const top100 = await getTop100Clusters();
     const top100Ids = new Set(top100.map((c) => c.id));
 
-    const clustersToProcess = merge.affectedClusterIds.filter((id) => top100Ids.has(id));
+    const clustersToProcess = merge.affectedClusterIds
+      .filter((id) => top100Ids.has(id))
+      .slice(0, scheduledMaxClusters());
     let clustersAnalyzed = 0;
     let articlesAnalyzed = 0;
 
@@ -75,6 +78,7 @@ export async function runScheduledNewsPipeline(): Promise<ScheduledNewsRunResult
     }
 
     setLastAnalysisAt(new Date().toISOString());
+    await saveFeedStateToKv(exportFeedSnapshot());
 
     return {
       success: errors.length === 0,

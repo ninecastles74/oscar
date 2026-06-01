@@ -26,6 +26,8 @@ import { getServerEnv } from "../env/server-env";
 import {
   loadManualRequest,
   loadManualSubmission,
+  loadManualReliability,
+  persistManualReliability,
   persistManualRequest,
   persistManualSubmission,
   syncManualRequest,
@@ -220,11 +222,17 @@ async function runManualAnalysisPipeline(
     request.progress = 35;
     await syncManualRequest(request);
 
+    request.progress = 50;
+    await syncManualRequest(request);
+
     let bundle = await runVerificationPipeline(pipelineArticle);
       console.log(
         "[executeManualAnalysis] AI diagnostics",
         JSON.stringify(await getAiAnalysisDiagnostics()),
       );
+    request.progress = 70;
+    await syncManualRequest(request);
+
     bundle = await enrichVerificationWithMultiModel(bundle, "user");
     assertLiveAnalysisReport(bundle.report, bundle.stages);
     const { report, results } = bundle;
@@ -247,7 +255,9 @@ async function runManualAnalysisPipeline(
     request.progress = 100;
     request.completedAt = new Date().toISOString();
     request.report = reportWithConsensus;
+    request.reliability = reliability;
 
+    await persistManualReliability(requestId, reliability);
     await syncManualSubmission(submission);
     await syncManualRequest(request);
 
@@ -313,7 +323,7 @@ async function runManualAnalysisPipeline(
 export async function runManualAnalysis(
   input: BeginManualAnalysisInput,
 ): Promise<ManualAnalysisResponse> {
-  const { requestId } = beginManualAnalysis(input);
+  const { requestId } = await beginManualAnalysis(input);
   await executeManualAnalysis(requestId);
   const result = await getManualAnalysisResult(requestId);
   if (!result) {
@@ -335,7 +345,9 @@ export async function getManualAnalysisResult(
   if (request.status !== "completed" || !request.report) return null;
   const reliability =
     getReliabilityBundleByArticleId(submission.id) ??
-    getReliabilityBundleByArticleId(requestId);
+    getReliabilityBundleByArticleId(requestId) ??
+    (await loadManualReliability(requestId)) ??
+    request.reliability;
   if (!reliability) return null;
 
   return {

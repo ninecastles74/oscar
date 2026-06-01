@@ -1,4 +1,4 @@
-import type { ManualSubmission, UserAnalysisRequest } from "@/types/news-platform";
+import type { ManualSubmission, ReliabilityScoreBundle, UserAnalysisRequest } from "@/types/news-platform";
 import { getFeedKv, isFeedKvConfigured } from "../news/worker-env";
 import {
   getRequest,
@@ -75,4 +75,18 @@ export async function syncManualRequest(request: UserAnalysisRequest): Promise<v
 export async function syncManualSubmission(submission: ManualSubmission): Promise<void> {
   updateSubmission(submission);
   await kvPut(`sub:${submission.id}`, submission);
+}
+
+export async function persistManualReliability(
+  requestId: string,
+  bundle: ReliabilityScoreBundle,
+): Promise<void> {
+  await kvPut(`rel:${requestId}`, bundle);
+}
+
+export async function loadManualReliability(
+  requestId: string,
+): Promise<ReliabilityScoreBundle | undefined> {
+  const fromKv = await kvGet<ReliabilityScoreBundle>(`rel:${requestId}`);
+  return fromKv ?? undefined;
 }

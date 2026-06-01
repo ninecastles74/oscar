@@ -141,7 +141,7 @@ async function verifyOneClaim(
 
   const hasLiveWebEvidence = evidence.some((e) => e.id?.includes("-live-e"));
   stages.push(hasLiveWebEvidence ? "gemini_corroboration_json" : "gemini_corroboration");
-  const corroboration = await verifyClaimWithGemini({
+  let corroboration = await verifyClaimWithGemini({
     claimId: claim.id,
     claimText: claim.text,
     evidence: evidencePayload,
@@ -149,7 +149,29 @@ async function verifyOneClaim(
     priorVerdict: review.skipped ? primary : review,
     skipGoogleSearch: hasLiveWebEvidence,
   });
-  if (!corroboration?.geminiMeta?.liveApiCalled) {
+
+  if (!corroboration && hasLiveWebEvidence) {
+    const prior = review.skipped ? primary : review;
+    stages.push("gemini_corroboration_evidence_fallback");
+    corroboration = {
+      provider: "google",
+      model: "live-evidence-fallback",
+      role: "corroboration",
+      verdict: prior.verdict,
+      confidence: prior.confidence,
+      reasoning:
+        "Corroboration uses attached live web evidence; Gemini JSON corroboration was unavailable.",
+      geminiMeta: {
+        liveApiCalled: false,
+        searchPerformed: false,
+        searchQueryCount: 0,
+        webSearchQueries: [],
+        sourcesUsed: [],
+      },
+    };
+  }
+
+  if (!corroboration) {
     const err = getLastGeminiError();
     liveAiError(
       `Gemini corroboration failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
@@ -175,6 +197,7 @@ export async function arbitrateSingleClaim(
 }
 
 const MANUAL_MAX_CLAIMS = Number(getServerEnv("MANUAL_MULTIMODEL_MAX_CLAIMS")) || 5;
+const SCHEDULED_MAX_CLAIMS = Number(getServerEnv("SCHEDULED_MULTIMODEL_MAX_CLAIMS")) || 5;
 const MANUAL_CONCURRENCY = Number(getServerEnv("MANUAL_MULTIMODEL_CONCURRENCY")) || 1;
 
 async function mapWithConcurrency<T, R>(
@@ -211,6 +234,9 @@ export async function runMultiModelVerification(
   let claims = results.scoredClaims;
   if (options?.trigger === "user" && claims.length > MANUAL_MAX_CLAIMS) {
     claims = claims.slice(0, MANUAL_MAX_CLAIMS);
+  }
+  if (options?.trigger === "scheduled" && claims.length > SCHEDULED_MAX_CLAIMS) {
+    claims = claims.slice(0, SCHEDULED_MAX_CLAIMS);
   }
 
   const verifications = await mapWithConcurrency(claims, MANUAL_CONCURRENCY, async (claim) => {
