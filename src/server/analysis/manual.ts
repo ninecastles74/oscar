@@ -4,7 +4,6 @@ import { assertLiveAnalysisReport } from "./live-ai-guard";
 import type { AnalysisTrigger } from "./context";
 import { applyClaimConsensusToReport } from "../consensus-engine";
 import { enrichVerificationWithMultiModel } from "../multi-model";
-import { getAiAnalysisDiagnostics } from "./ai-diagnostics";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import {
   captureWorkerEnvSnapshot,
@@ -35,7 +34,7 @@ import {
 } from "./manual-persist";
 
 const MANUAL_ANALYSIS_WALL_MS =
-  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 5 * 60 * 1000;
+  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 10 * 60 * 1000;
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
@@ -226,10 +225,6 @@ async function runManualAnalysisPipeline(
     await syncManualRequest(request);
 
     let bundle = await runVerificationPipeline(pipelineArticle);
-      console.log(
-        "[executeManualAnalysis] AI diagnostics",
-        JSON.stringify(await getAiAnalysisDiagnostics()),
-      );
     request.progress = 70;
     await syncManualRequest(request);
 
@@ -255,7 +250,6 @@ async function runManualAnalysisPipeline(
     request.progress = 100;
     request.completedAt = new Date().toISOString();
     request.report = reportWithConsensus;
-    request.reliability = reliability;
 
     await persistManualReliability(requestId, reliability);
     await syncManualSubmission(submission);
@@ -346,8 +340,7 @@ export async function getManualAnalysisResult(
   const reliability =
     getReliabilityBundleByArticleId(submission.id) ??
     getReliabilityBundleByArticleId(requestId) ??
-    (await loadManualReliability(requestId)) ??
-    request.reliability;
+    (await loadManualReliability(requestId));
   if (!reliability) return null;
 
   return {

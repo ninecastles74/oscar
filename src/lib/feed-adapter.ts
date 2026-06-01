@@ -25,12 +25,13 @@ export function storyClusterToUiCluster(c: StoryCluster, index: number): Cluster
 
 /** Map ingested article to coverage list item on cluster detail. */
 export function articleToUiStory(article: NewsArticle, clusterId: string): Story {
-  const domain = article.sourceDomain.replace(/^www\./, "");
+  const domain = (article.sourceDomain ?? "unknown").replace(/^www\./, "");
+  const summary = (article.description?.trim() || article.title?.trim() || "").slice(0, 280);
   return {
     id: article.id || article.url,
     clusterId,
     headline: article.title,
-    summary: article.description.slice(0, 280),
+    summary,
     publishedAt: article.publishedAt,
     sourceId: article.sourceId ?? domain,
     url: article.url,

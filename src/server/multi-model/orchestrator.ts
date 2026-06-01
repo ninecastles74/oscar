@@ -140,35 +140,40 @@ async function verifyOneClaim(
   }
 
   const hasLiveWebEvidence = evidence.some((e) => e.id?.includes("-live-e"));
-  stages.push(hasLiveWebEvidence ? "gemini_corroboration_json" : "gemini_corroboration");
-  let corroboration = await verifyClaimWithGemini({
-    claimId: claim.id,
-    claimText: claim.text,
-    evidence: evidencePayload,
-    role: "corroboration",
-    priorVerdict: review.skipped ? primary : review,
-    skipGoogleSearch: hasLiveWebEvidence,
-  });
+  let corroboration: ModelClaimVerdict | null = null;
 
-  if (!corroboration && hasLiveWebEvidence) {
+  if (hasLiveWebEvidence) {
     const prior = review.skipped ? primary : review;
-    stages.push("gemini_corroboration_evidence_fallback");
+    stages.push("gemini_corroboration_live_evidence");
     corroboration = {
       provider: "google",
-      model: "live-evidence-fallback",
+      model: "live-evidence",
       role: "corroboration",
       verdict: prior.verdict,
       confidence: prior.confidence,
       reasoning:
-        "Corroboration uses attached live web evidence; Gemini JSON corroboration was unavailable.",
+        "Corroboration from live web evidence gathered during verification (skips redundant Gemini JSON pass).",
       geminiMeta: {
         liveApiCalled: false,
-        searchPerformed: false,
+        searchPerformed: true,
         searchQueryCount: 0,
         webSearchQueries: [],
-        sourcesUsed: [],
+        sourcesUsed: evidence
+          .filter((e) => e.id?.includes("-live-e"))
+          .slice(0, 4)
+          .map((e) => ({ title: e.sourceName, uri: e.url })),
       },
     };
+  } else {
+    stages.push("gemini_corroboration");
+    corroboration = await verifyClaimWithGemini({
+      claimId: claim.id,
+      claimText: claim.text,
+      evidence: evidencePayload,
+      role: "corroboration",
+      priorVerdict: review.skipped ? primary : review,
+      skipGoogleSearch: false,
+    });
   }
 
   if (!corroboration) {
@@ -198,7 +203,8 @@ export async function arbitrateSingleClaim(
 
 const MANUAL_MAX_CLAIMS = Number(getServerEnv("MANUAL_MULTIMODEL_MAX_CLAIMS")) || 5;
 const SCHEDULED_MAX_CLAIMS = Number(getServerEnv("SCHEDULED_MULTIMODEL_MAX_CLAIMS")) || 5;
-const MANUAL_CONCURRENCY = Number(getServerEnv("MANUAL_MULTIMODEL_CONCURRENCY")) || 1;
+const DEFAULT_MANUAL_CONCURRENCY = 2;
+const DEFAULT_SCHEDULED_CONCURRENCY = 1;
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -239,7 +245,20 @@ export async function runMultiModelVerification(
     claims = claims.slice(0, SCHEDULED_MAX_CLAIMS);
   }
 
-  const verifications = await mapWithConcurrency(claims, MANUAL_CONCURRENCY, async (claim) => {
+  const concurrencyRaw = Number.parseInt(
+    getServerEnv("MANUAL_MULTIMODEL_CONCURRENCY") ?? "",
+    10,
+  );
+  const concurrency =
+    options?.trigger === "scheduled"
+      ? Number.isFinite(concurrencyRaw) && concurrencyRaw > 0
+        ? concurrencyRaw
+        : DEFAULT_SCHEDULED_CONCURRENCY
+      : Number.isFinite(concurrencyRaw) && concurrencyRaw > 0
+        ? concurrencyRaw
+        : DEFAULT_MANUAL_CONCURRENCY;
+
+  const verifications = await mapWithConcurrency(claims, concurrency, async (claim) => {
     const evidence = results.evidenceByClaimId[claim.id] ?? claim.evidence ?? [];
     const contradiction = results.contradictionAnalyses?.[claim.id];
     const { verification } = await verifyOneClaim(claim, evidence, contradiction);

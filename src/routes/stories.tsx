@@ -8,21 +8,32 @@ import { CLUSTERS } from "@/lib/mock-data";
 export const Route = createFileRoute("/stories")({
   head: () => ({ meta: [{ title: pageTitle("Top 100 stories") }] }),
   loader: async () => {
-    const [feed, diagnostics] = await Promise.all([
-      getTop100Feed({ data: {} }),
-      getNewsFeedDiagnostics({ data: {} }),
-    ]);
-    const clusters =
-      feed.clusters.length > 0
-        ? feed.clusters.map((c, i) => storyClusterToUiCluster(c, i))
-        : CLUSTERS;
-    return {
-      clusters,
-      meta: feed.meta,
-      usingLiveFeed: feed.clusters.length > 0,
-      bootstrap: feed.bootstrap,
-      diagnostics,
-    };
+    try {
+      const [feed, diagnostics] = await Promise.all([
+        getTop100Feed({ data: {} }),
+        getNewsFeedDiagnostics({ data: {} }),
+      ]);
+      const clusters =
+        feed.clusters.length > 0
+          ? feed.clusters.map((c, i) => storyClusterToUiCluster(c, i))
+          : CLUSTERS;
+      return {
+        clusters,
+        meta: feed.meta,
+        usingLiveFeed: feed.clusters.length > 0,
+        bootstrap: feed.bootstrap,
+        diagnostics,
+      };
+    } catch (err) {
+      console.error("[stories] feed loader failed:", err instanceof Error ? err.message : err);
+      return {
+        clusters: CLUSTERS,
+        meta: undefined,
+        usingLiveFeed: false,
+        bootstrap: { ran: false, reason: "loader_failed" },
+        diagnostics: undefined,
+      };
+    }
   },
   component: StoriesRoute,
 });

@@ -74,8 +74,10 @@ function uniqueSourceLabels(
 }
 
 function buildSummary(articles: NewsArticle[]): string {
-  const lead = articles.find((a) => a.description.length > 40) ?? articles[0];
-  return lead.description.slice(0, 280);
+  const lead =
+    articles.find((a) => (a.description?.length ?? 0) > 40) ?? articles[0];
+  const text = lead?.description?.trim() || lead?.title?.trim() || "No summary available.";
+  return text.slice(0, 280);
 }
 
 /**

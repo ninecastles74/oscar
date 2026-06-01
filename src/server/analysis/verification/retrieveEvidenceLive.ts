@@ -9,6 +9,9 @@ import type { ClassifiedClaim } from "./types";
 const MAX_TOTAL_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
 /** Claims per batched Google Search call (smaller JSON = more claims covered). */
 const BATCH_SIZE = Number(getServerEnv("LIVE_EVIDENCE_BATCH_SIZE")) || 2;
+/** Max per-claim retry calls after batching (avoids wall-timeout on free tier). */
+const MAX_SINGLE_RETRIES =
+  Number(getServerEnv("LIVE_EVIDENCE_MAX_SINGLE_RETRIES")) || 2;
 const EVIDENCE_MODEL = resolveGeminiVerificationModel();
 
 interface BatchedEvidencePayload {
@@ -203,7 +206,7 @@ export async function retrieveEvidenceLive(
   }
 
   const missing = toResearch.filter((c) => !out[c.id]?.length);
-  for (const claim of missing) {
+  for (const claim of missing.slice(0, MAX_SINGLE_RETRIES)) {
     await researchSingleClaim(claim, out);
   }
 

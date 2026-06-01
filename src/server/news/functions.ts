@@ -20,6 +20,7 @@ import { MAJOR_US_WORLD_SOURCES } from "./major-publishers";
 import { runScheduledNewsPipeline } from "../jobs/news/scheduled-pipeline";
 import { bootstrapFeedIfEmpty } from "./feed-bootstrap";
 import { feedKvStatus } from "./feed-persist";
+import { isFeedKvConfigured, runInWorkerBackground } from "./worker-env";
 import {
   isScheduledNewsEnabled,
   scheduledIngestCron,
@@ -82,25 +83,59 @@ export const listRssFeeds = createServerFn({ method: "GET" }).handler(async () =
 
 /** Top 100 story clusters from the live feed (newest ranked; max 100 slots). */
 export const getTop100Feed = createServerFn({ method: "GET" }).handler(async () => {
-  let bootstrap: Awaited<ReturnType<typeof bootstrapFeedIfEmpty>> | undefined;
-  let clusters = await getTop100Clusters();
-  if (clusters.length === 0) {
-    bootstrap = await bootstrapFeedIfEmpty();
-    clusters = await getTop100Clusters();
+  try {
+    let bootstrap: Awaited<ReturnType<typeof bootstrapFeedIfEmpty>> | undefined;
+    let clusters = await getTop100Clusters();
+    if (clusters.length === 0) {
+      // Never block SSR on a full RSS/API ingest — bootstrap in the background when possible.
+      if (isFeedKvConfigured()) {
+        runInWorkerBackground(
+          bootstrapFeedIfEmpty()
+            .then((result) => console.log("[feed] background bootstrap", JSON.stringify(result)))
+            .catch((err) =>
+              console.error(
+                "[feed] background bootstrap failed:",
+                err instanceof Error ? err.message : err,
+              ),
+            ),
+        );
+        bootstrap = { ran: false, reason: "bootstrap_scheduled" };
+      } else {
+        bootstrap = await bootstrapFeedIfEmpty();
+        clusters = await getTop100Clusters();
+      }
+    }
+    const meta = getFeedMeta();
+    return {
+      clusters,
+      meta,
+      bootstrap,
+      majorSources: MAJOR_US_WORLD_SOURCES.map((s) => ({
+        id: s.id,
+        name: s.name,
+        domain: s.domain,
+        reliability: s.reliability,
+        bias: s.bias,
+      })),
+    };
+  } catch (err) {
+    console.error("[getTop100Feed] failed:", err instanceof Error ? err.message : err);
+    return {
+      clusters: [],
+      meta: getFeedMeta(),
+      bootstrap: {
+        ran: false,
+        reason: err instanceof Error ? err.message : "feed_load_failed",
+      },
+      majorSources: MAJOR_US_WORLD_SOURCES.map((s) => ({
+        id: s.id,
+        name: s.name,
+        domain: s.domain,
+        reliability: s.reliability,
+        bias: s.bias,
+      })),
+    };
   }
-  const meta = getFeedMeta();
-  return {
-    clusters,
-    meta,
-    bootstrap,
-    majorSources: MAJOR_US_WORLD_SOURCES.map((s) => ({
-      id: s.id,
-      name: s.name,
-      domain: s.domain,
-      reliability: s.reliability,
-      bias: s.bias,
-    })),
-  };
 });
 
 /** Diagnostics for news ingest / feed (no secrets). */

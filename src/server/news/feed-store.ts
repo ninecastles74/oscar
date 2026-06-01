@@ -154,8 +154,7 @@ export async function hydrateFeedFromSnapshot(snapshot: PersistedFeedState): Pro
   state.top100ClusterIds = snapshot.top100ClusterIds;
   state.lastIngestAt = snapshot.lastIngestAt;
   state.lastAnalysisAt = snapshot.lastAnalysisAt;
-  await refreshStoredArticlePublishers();
-  await refreshStoredArticleCategories();
+  // Recompute display fields only — avoid OpenAI/RSS refresh on every KV hydrate (SSR timeouts).
   refreshClusterDisplayFields();
 }
 
@@ -183,11 +182,19 @@ export async function persistFeedToKv(): Promise<void> {
 export async function ensureFeedHydratedFromKv(): Promise<boolean> {
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
-    if (state.top100ClusterIds.length > 0) return true;
-    const snapshot = await loadFeedStateFromKv();
-    if (!snapshot || snapshot.top100ClusterIds.length === 0) return false;
-    await hydrateFeedFromSnapshot(snapshot);
-    return true;
+    try {
+      if (state.top100ClusterIds.length > 0) return true;
+      const snapshot = await loadFeedStateFromKv();
+      if (!snapshot || snapshot.top100ClusterIds.length === 0) return false;
+      await hydrateFeedFromSnapshot(snapshot);
+      return true;
+    } catch (err) {
+      console.error(
+        "[feed-store] KV hydrate failed:",
+        err instanceof Error ? err.message : err,
+      );
+      return false;
+    }
   })();
   return hydratePromise;
 }

@@ -8,16 +8,21 @@ import { CLUSTERS } from "@/lib/mock-data";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: pageTitle(OSCAR.signals) }] }),
   loader: async () => {
-    const feed = await getTop100Feed({ data: {} });
-    const clusters =
-      feed.clusters.length > 0
-        ? feed.clusters.map((c, i) => storyClusterToUiCluster(c, i))
-        : CLUSTERS;
-    return {
-      clusters,
-      usingLiveFeed: feed.clusters.length > 0,
-      meta: feed.meta,
-    };
+    try {
+      const feed = await getTop100Feed({ data: {} });
+      const clusters =
+        feed.clusters.length > 0
+          ? feed.clusters.map((c, i) => storyClusterToUiCluster(c, i))
+          : CLUSTERS;
+      return {
+        clusters,
+        usingLiveFeed: feed.clusters.length > 0,
+        meta: feed.meta,
+      };
+    } catch (err) {
+      console.error("[dashboard] feed loader failed:", err instanceof Error ? err.message : err);
+      return { clusters: CLUSTERS, usingLiveFeed: false, meta: undefined };
+    }
   },
   component: DashboardRoute,
 });

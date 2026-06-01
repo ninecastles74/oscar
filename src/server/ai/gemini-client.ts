@@ -147,7 +147,7 @@ async function geminiGenerateContentOnce(
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: options.useGoogleSearch ? 4096 : 2048,
-      thinkingConfig: { thinkingBudget: 0 },
+      ...(model.includes("2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
       ...(options.useGoogleSearch || !options.jsonMode
         ? {}
         : { responseMimeType: "application/json" }),

@@ -7,7 +7,8 @@
   "main": "src/server.ts",
   "vars": {
     "MULTI_MODEL_VERIFICATION_ENABLED": "true",
-    "SCHEDULED_USE_MULTI_MODEL": "true"
+    "SCHEDULED_USE_MULTI_MODEL": "true",
+    "MANUAL_ANALYSIS_WALL_MS": "600000"
   },
   // Free Workers: max 5 cron triggers per *account* (not per Worker). Keep ≤4 here
   // if you use crons on other Workers. Daily reliability jobs share one schedule.
