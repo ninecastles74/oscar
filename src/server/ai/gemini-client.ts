@@ -45,7 +45,7 @@ export function clearLastGeminiError(): void {
 
 export { geminiModelCandidates } from "./gemini-models";
 
-const GEMINI_CLIENT_VERSION = "2026-05-20-v4";
+const GEMINI_CLIENT_VERSION = "2026-05-20-v6";
 
 async function geminiFetch(url: string, body: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -146,7 +146,8 @@ async function geminiGenerateContentOnce(
     contents: [{ role: "user", parts: [{ text: options.user }] }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 2048,
+      maxOutputTokens: options.useGoogleSearch ? 4096 : 2048,
+      thinkingConfig: { thinkingBudget: 0 },
       ...(options.useGoogleSearch || !options.jsonMode
         ? {}
         : { responseMimeType: "application/json" }),
@@ -205,8 +206,32 @@ async function geminiGenerateContentOnce(
       }
 
       const candidate = data.candidates?.[0];
-      const finishReason = candidate?.finishReason;
-      if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
+      if (!candidate) {
+        const msg = `${model}@${apiVersion}: no candidates`;
+        lastGeminiAttemptLog.push(msg);
+        lastGeminiError = msg;
+        console.warn("[gemini-client]", msg);
+        return null;
+      }
+
+      const grounding = candidate.groundingMetadata;
+      const groundedSources = groundingToSourceList(grounding);
+      const finishReason = candidate.finishReason;
+      const parts = candidate.content?.parts ?? [];
+      const answerParts = parts.filter(
+        (p: { text?: string; thought?: boolean }) => p.text && !p.thought,
+      );
+      const text = (answerParts.length > 0 ? answerParts : parts)
+        .map((p: { text?: string }) => p.text)
+        .filter(Boolean)
+        .join("\n");
+
+      if (
+        finishReason &&
+        finishReason !== "STOP" &&
+        finishReason !== "MAX_TOKENS" &&
+        !(options.useGoogleSearch && groundedSources.length > 0)
+      ) {
         const msg = `${model}@${apiVersion}: finishReason=${finishReason}`;
         lastGeminiAttemptLog.push(msg);
         lastGeminiError = msg;
@@ -214,8 +239,15 @@ async function geminiGenerateContentOnce(
         return null;
       }
 
-      const text = candidate?.content?.parts?.map((p) => p.text).filter(Boolean).join("\n") ?? "";
       if (!text) {
+        if (options.useGoogleSearch && groundedSources.length > 0) {
+          return {
+            text: "",
+            grounding,
+            totalTokens: data.usageMetadata?.totalTokenCount,
+            model: `${model}+google_search`,
+          };
+        }
         const msg = `${model}@${apiVersion}: empty response`;
         lastGeminiAttemptLog.push(msg);
         lastGeminiError = msg;
@@ -225,7 +257,7 @@ async function geminiGenerateContentOnce(
 
       return {
         text,
-        grounding: candidate?.groundingMetadata,
+        grounding,
         totalTokens: data.usageMetadata?.totalTokenCount,
         model: options.useGoogleSearch ? `${model}+google_search` : model,
       };
@@ -247,8 +279,17 @@ async function geminiGenerateContentOnce(
 }
 
 export function groundingToSourceList(grounding?: GeminiGroundingMetadata) {
-  return (grounding?.groundingChunks ?? [])
+  const fromChunks = (grounding?.groundingChunks ?? [])
     .map((c) => c.web)
     .filter((w): w is { title?: string; uri?: string } => !!w?.uri || !!w?.title)
     .slice(0, 8);
+  if (fromChunks.length > 0) return fromChunks;
+
+  return (grounding?.webSearchQueries ?? [])
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((query) => ({
+      title: query,
+      uri: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+    }));
 }
