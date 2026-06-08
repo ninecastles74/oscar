@@ -131,11 +131,23 @@ export function Top100View({
           <div>Flags</div>
         </div>
         <div className="divide-y">
-          {list.map((c, i) => (
+          {list.map((c, i) => {
+            const singleArticleId =
+              c.storyCount === 1 && c.storyIds?.[0] ? c.storyIds[0] : undefined;
+            const href = singleArticleId
+              ? ({
+                  to: "/stories/$clusterId/$articleId" as const,
+                  params: { clusterId: c.id, articleId: singleArticleId },
+                } as const)
+              : ({
+                  to: "/consensus/$clusterId" as const,
+                  params: { clusterId: c.id },
+                } as const);
+
+            return (
             <Link
               key={c.id}
-              to="/consensus/$clusterId"
-              params={{ clusterId: c.id }}
+              {...href}
               className="grid grid-cols-[40px_72px_1fr_160px_120px_160px_120px] items-center gap-4 px-4 py-4 transition-colors hover:bg-secondary/40"
             >
               <span className="font-mono text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
@@ -172,7 +184,8 @@ export function Top100View({
                 )}
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>

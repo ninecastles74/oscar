@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { FileText, Link2, Loader2, Sparkles } from "lucide-react";
-import { submitManualAnalysis } from "@/server/analysis/functions";
+import { postJson } from "@/lib/api-client";
 import { getAiUsageQuota } from "@/server/usage/functions";
 import { getAccessToken } from "@/lib/auth-session";
 import { getAnonymousId } from "@/lib/anonymous-id";
@@ -59,15 +59,28 @@ export function UserAnalysisForm({
       const anonymousId = getAnonymousId();
       const base = { accessToken, anonymousId };
 
-      const result = await submitManualAnalysis({
-        data: tab === "url" ? { ...base, url: value.trim() } : { ...base, text: value.trim() },
-      });
+      const endpoint = tab === "url" ? "/api/analyze/url" : "/api/analyze/text";
+      const payload =
+        tab === "url" ? { ...base, url: value.trim() } : { ...base, text: value.trim() };
 
-      if ("error" in result && result.error) {
-        setError(result.error.message);
-        if ("quota" in result.error && result.error.quota) {
-          setQuota(result.error.quota as QuotaInfo);
-        }
+      const result = await postJson<{
+        requestId: string;
+        submissionId: string;
+        status: "completed" | "failed" | "processing";
+        quota?: QuotaInfo;
+        kvConfigured?: boolean;
+        failedMessage?: string;
+        analysisSnapshot?: {
+          report: unknown;
+          reliability?: unknown;
+          finalIntelligence?: unknown;
+          submission?: unknown;
+        };
+        error?: { code?: string; message?: string; quota?: QuotaInfo };
+      }>(endpoint, payload);
+
+      if (!result.success) {
+        setError(result.error);
         return;
       }
 

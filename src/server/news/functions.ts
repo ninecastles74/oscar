@@ -11,6 +11,7 @@ import {
   getTop100Clusters,
   getFeedMeta,
   getStoredCluster,
+  getStoredClusterHydrated,
 } from "./feed-store";
 import { getReliabilityBundleByArticleId } from "../reliability/engine";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
@@ -203,7 +204,7 @@ export const getFeedCluster = createServerFn({ method: "GET" })
     z.object({ clusterId: z.string().min(1) }).parse(data),
   )
   .handler(async ({ data }) => {
-    const cluster = getStoredCluster(data.clusterId);
+    const cluster = await getStoredClusterHydrated(data.clusterId);
     if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     return { cluster };
   });
@@ -243,7 +244,7 @@ export const getFeedClusterDetail = createServerFn({ method: "GET" })
     z.object({ clusterId: z.string().min(1) }).parse(data),
   )
   .handler(async ({ data }) => {
-    const cluster = getStoredCluster(data.clusterId);
+    const cluster = await getStoredClusterHydrated(data.clusterId);
     if (!cluster) return { error: { code: "NOT_FOUND", message: "Cluster not in feed" } };
     const articles = getClusterArticlesFromStore(data.clusterId);
     return { cluster, articles };

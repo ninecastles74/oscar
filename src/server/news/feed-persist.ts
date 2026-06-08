@@ -2,8 +2,11 @@ import type { StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { getFeedKv, isFeedKvConfigured } from "./worker-env";
 import type { ArticlePageScores } from "@/types/article-page-scores";
 import type { StoredArticle, StoredCluster } from "./feed-store";
+import type { AnalyzedArticleBundle } from "../consensus/types";
 
 const FEED_STATE_KEY = "oscar:feed:state:v1";
+const BUNDLE_KEY_PREFIX = "oscar:feed:bundle:v1:";
+const BUNDLE_TTL_SEC = 7 * 24 * 3600;
 const BOOTSTRAP_LOCK_KEY = "oscar:feed:bootstrap-lock:v1";
 const BOOTSTRAP_COOLDOWN_SEC = 900; // 15 min between auto-ingest attempts
 
@@ -123,4 +126,49 @@ export function feedKvStatus(): { configured: boolean; storage: "kv" | "memory" 
     configured: isFeedKvConfigured(),
     storage: isFeedKvConfigured() ? "kv" : "memory",
   };
+}
+
+function bundleKvKey(articleId: string): string {
+  return `${BUNDLE_KEY_PREFIX}${articleId}`;
+}
+
+export async function saveArticleBundleToKv(
+  articleId: string,
+  bundle: AnalyzedArticleBundle,
+): Promise<boolean> {
+  const kv = getFeedKv();
+  if (!kv) return false;
+  try {
+    await kv.put(bundleKvKey(articleId), JSON.stringify(bundle), {
+      expirationTtl: BUNDLE_TTL_SEC,
+    });
+    console.log("[feed-persist] bundle saved to KV:", articleId);
+    return true;
+  } catch (err) {
+    console.error(
+      "[feed-persist] bundle KV save failed:",
+      articleId,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+export async function loadArticleBundleFromKv(
+  articleId: string,
+): Promise<AnalyzedArticleBundle | null> {
+  const kv = getFeedKv();
+  if (!kv) return null;
+  try {
+    const raw = await kv.get(bundleKvKey(articleId), "json");
+    if (!raw || typeof raw !== "object") return null;
+    return raw as AnalyzedArticleBundle;
+  } catch (err) {
+    console.error(
+      "[feed-persist] bundle KV load failed:",
+      articleId,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 }

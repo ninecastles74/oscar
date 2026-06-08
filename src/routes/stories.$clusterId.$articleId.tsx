@@ -1,9 +1,12 @@
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ReportView } from "@/features/reports/report-view";
 import { loadFeedArticleAnalysis } from "@/server/consensus/functions";
+import { postJson } from "@/lib/api-client";
+import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { OSCAR, pageTitle } from "@/lib/brand";
+import type { AnalysisReport } from "@/types/news-platform";
 
 export const Route = createFileRoute("/stories/$clusterId/$articleId")({
   head: () => ({ meta: [{ title: pageTitle(OSCAR.analysis) }] }),
@@ -16,6 +19,7 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
       return {
         pendingAnalysis: true as const,
         clusterId: params.clusterId,
+        articleId: params.articleId,
         title: result.title ?? "Article",
         message: result.message,
       };
@@ -45,24 +49,106 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
   notFoundComponent: () => <div className="p-12 text-center">Article not found</div>,
 });
 
+type CompletedAnalysis = {
+  clusterId: string;
+  report: ReturnType<typeof analysisReportToManualReport>;
+  platformReport?: AnalysisReport;
+  explainability?: unknown;
+  articlePageScores?: unknown;
+  storyReport?: unknown;
+  storyScores?: unknown;
+};
+
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
   const router = useRouter();
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
+  const triggered = useRef(false);
+
+  const isPending = "pendingAnalysis" in data && data.pendingAnalysis;
 
   useEffect(() => {
-    if (!("pendingAnalysis" in data) || !data.pendingAnalysis) return;
+    if (!isPending || triggered.current) return;
+    triggered.current = true;
+
+    void postJson<{
+      status: "completed" | "processing";
+      report?: ReturnType<typeof analysisReportToManualReport>;
+      platformReport?: AnalysisReport;
+      explainability?: unknown;
+      articlePageScores?: unknown;
+      storyReport?: unknown;
+    }>("/api/analyze/article", {
+      articleId: "articleId" in data ? data.articleId : "",
+      clusterId: data.clusterId,
+      sync: true,
+    }).then((res) => {
+      if (!res.success) {
+        setAnalysisError(res.error);
+        return;
+      }
+      if (res.status === "completed" && res.report) {
+        setCompleted({
+          clusterId: data.clusterId,
+          report: res.report,
+          platformReport: res.platformReport,
+          explainability: res.explainability,
+          articlePageScores: res.articlePageScores,
+          storyReport: res.storyReport,
+        });
+      }
+    });
+  }, [isPending, data]);
+
+  useEffect(() => {
+    if (!isPending || completed || analysisError) return;
     const timer = setInterval(() => void router.invalidate(), 2500);
     return () => clearInterval(timer);
-  }, [data, router]);
+  }, [isPending, completed, analysisError, router]);
 
-  if ("pendingAnalysis" in data && data.pendingAnalysis) {
+  if (completed) {
+    return (
+      <>
+        <div className="mx-auto max-w-6xl px-6 pt-6">
+          <Link
+            to="/consensus/$clusterId"
+            params={{ clusterId: completed.clusterId }}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            ← Back to cluster analysis
+          </Link>
+        </div>
+        <ReportView
+          report={completed.report}
+          platformReport={completed.platformReport}
+          explainability={completed.explainability}
+          articlePageScores={completed.articlePageScores}
+          hideTopBackLink
+          articlePageMode
+          storyScores={completed.storyScores}
+          storyReport={completed.storyReport}
+        />
+      </>
+    );
+  }
+
+  if (isPending) {
     return (
       <main className="mx-auto flex max-w-lg flex-col items-center px-6 py-24 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-        <h1 className="mt-4 font-serif text-2xl font-semibold">{data.title}</h1>
+        <h1 className="mt-4 font-serif text-2xl font-semibold">
+          {"title" in data ? data.title : "Article"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {data.message ?? "Running live Oscar analysis for this article…"}
+          {analysisError ??
+            ("message" in data ? data.message : "Running live Oscar analysis for this article…")}
         </p>
+        {!analysisError && (
+          <p className="mt-4 text-xs text-muted-foreground">
+            This may take 1–3 minutes for full multi-model verification.
+          </p>
+        )}
         <Link
           to="/consensus/$clusterId"
           params={{ clusterId: data.clusterId }}
@@ -90,6 +176,8 @@ function FeedArticleAnalysisRoute() {
     );
   }
 
+  if (!("report" in data)) return null;
+
   return (
     <>
       <div className="mx-auto max-w-6xl px-6 pt-6">
@@ -105,7 +193,7 @@ function FeedArticleAnalysisRoute() {
         report={data.report}
         platformReport={data.platformReport}
         explainability={data.explainability}
-        articlePageScores={"articlePageScores" in data ? data.articlePageScores : null}
+        articlePageScores={"articlePageScores" in data ? data.articlePageScores : undefined}
         hideTopBackLink
         articlePageMode
         storyScores={"storyScores" in data ? data.storyScores : null}

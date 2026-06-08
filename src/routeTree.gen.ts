@@ -24,9 +24,18 @@ import { Route as StoriesClusterIdRouteImport } from './routes/stories.$clusterI
 import { Route as ConsensusClusterIdRouteImport } from './routes/consensus.$clusterId'
 import { Route as CompareClusterIdRouteImport } from './routes/compare.$clusterId'
 import { Route as ClaimsClaimIdRouteImport } from './routes/claims.$claimId'
+import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as AnalyzeResultsRouteImport } from './routes/analyze.results'
 import { Route as AdminSourcesRouteImport } from './routes/admin.sources'
 import { Route as StoriesClusterIdArticleIdRouteImport } from './routes/stories.$clusterId.$articleId'
+import { Route as ApiStoriesTop100RouteImport } from './routes/api.stories.top-100'
+import { Route as ApiStoriesIdRouteImport } from './routes/api.stories.$id'
+import { Route as ApiArticlesIdRouteImport } from './routes/api.articles.$id'
+import { Route as ApiAnalyzeUrlRouteImport } from './routes/api.analyze.url'
+import { Route as ApiAnalyzeTextRouteImport } from './routes/api.analyze.text'
+import { Route as ApiAnalyzeArticleRouteImport } from './routes/api.analyze.article'
+import { Route as ApiExplainEntityTypeEntityIdRouteImport } from './routes/api.explain.$entityType.$entityId'
+import { Route as ApiDebugArticleIdRouteImport } from './routes/api.debug.article.$id'
 
 const StoriesRoute = StoriesRouteImport.update({
   id: '/stories',
@@ -103,6 +112,11 @@ const ClaimsClaimIdRoute = ClaimsClaimIdRouteImport.update({
   path: '/claims/$claimId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnalyzeResultsRoute = AnalyzeResultsRouteImport.update({
   id: '/results',
   path: '/results',
@@ -119,6 +133,47 @@ const StoriesClusterIdArticleIdRoute =
     path: '/$articleId',
     getParentRoute: () => StoriesClusterIdRoute,
   } as any)
+const ApiStoriesTop100Route = ApiStoriesTop100RouteImport.update({
+  id: '/api/stories/top-100',
+  path: '/api/stories/top-100',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStoriesIdRoute = ApiStoriesIdRouteImport.update({
+  id: '/api/stories/$id',
+  path: '/api/stories/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiArticlesIdRoute = ApiArticlesIdRouteImport.update({
+  id: '/api/articles/$id',
+  path: '/api/articles/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAnalyzeUrlRoute = ApiAnalyzeUrlRouteImport.update({
+  id: '/api/analyze/url',
+  path: '/api/analyze/url',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAnalyzeTextRoute = ApiAnalyzeTextRouteImport.update({
+  id: '/api/analyze/text',
+  path: '/api/analyze/text',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAnalyzeArticleRoute = ApiAnalyzeArticleRouteImport.update({
+  id: '/api/analyze/article',
+  path: '/api/analyze/article',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExplainEntityTypeEntityIdRoute =
+  ApiExplainEntityTypeEntityIdRouteImport.update({
+    id: '/api/explain/$entityType/$entityId',
+    path: '/api/explain/$entityType/$entityId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDebugArticleIdRoute = ApiDebugArticleIdRouteImport.update({
+  id: '/api/debug/article/$id',
+  path: '/api/debug/article/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -133,12 +188,21 @@ export interface FileRoutesByFullPath {
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
+  '/api/health': typeof ApiHealthRoute
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
   '/analyze/': typeof AnalyzeIndexRoute
+  '/api/analyze/article': typeof ApiAnalyzeArticleRoute
+  '/api/analyze/text': typeof ApiAnalyzeTextRoute
+  '/api/analyze/url': typeof ApiAnalyzeUrlRoute
+  '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/stories/$id': typeof ApiStoriesIdRoute
+  '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
+  '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -152,12 +216,21 @@ export interface FileRoutesByTo {
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
+  '/api/health': typeof ApiHealthRoute
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
   '/analyze': typeof AnalyzeIndexRoute
+  '/api/analyze/article': typeof ApiAnalyzeArticleRoute
+  '/api/analyze/text': typeof ApiAnalyzeTextRoute
+  '/api/analyze/url': typeof ApiAnalyzeUrlRoute
+  '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/stories/$id': typeof ApiStoriesIdRoute
+  '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
+  '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -173,12 +246,21 @@ export interface FileRoutesById {
   '/stories': typeof StoriesRouteWithChildren
   '/admin/sources': typeof AdminSourcesRoute
   '/analyze/results': typeof AnalyzeResultsRoute
+  '/api/health': typeof ApiHealthRoute
   '/claims/$claimId': typeof ClaimsClaimIdRoute
   '/compare/$clusterId': typeof CompareClusterIdRoute
   '/consensus/$clusterId': typeof ConsensusClusterIdRoute
   '/stories/$clusterId': typeof StoriesClusterIdRouteWithChildren
   '/analyze/': typeof AnalyzeIndexRoute
+  '/api/analyze/article': typeof ApiAnalyzeArticleRoute
+  '/api/analyze/text': typeof ApiAnalyzeTextRoute
+  '/api/analyze/url': typeof ApiAnalyzeUrlRoute
+  '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/stories/$id': typeof ApiStoriesIdRoute
+  '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
+  '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -195,12 +277,21 @@ export interface FileRouteTypes {
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
+    | '/api/health'
     | '/claims/$claimId'
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
     | '/analyze/'
+    | '/api/analyze/article'
+    | '/api/analyze/text'
+    | '/api/analyze/url'
+    | '/api/articles/$id'
+    | '/api/stories/$id'
+    | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/debug/article/$id'
+    | '/api/explain/$entityType/$entityId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -214,12 +305,21 @@ export interface FileRouteTypes {
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
+    | '/api/health'
     | '/claims/$claimId'
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
     | '/analyze'
+    | '/api/analyze/article'
+    | '/api/analyze/text'
+    | '/api/analyze/url'
+    | '/api/articles/$id'
+    | '/api/stories/$id'
+    | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/debug/article/$id'
+    | '/api/explain/$entityType/$entityId'
   id:
     | '__root__'
     | '/'
@@ -234,12 +334,21 @@ export interface FileRouteTypes {
     | '/stories'
     | '/admin/sources'
     | '/analyze/results'
+    | '/api/health'
     | '/claims/$claimId'
     | '/compare/$clusterId'
     | '/consensus/$clusterId'
     | '/stories/$clusterId'
     | '/analyze/'
+    | '/api/analyze/article'
+    | '/api/analyze/text'
+    | '/api/analyze/url'
+    | '/api/articles/$id'
+    | '/api/stories/$id'
+    | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/debug/article/$id'
+    | '/api/explain/$entityType/$entityId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -254,9 +363,18 @@ export interface RootRouteChildren {
   SourcesRoute: typeof SourcesRoute
   StoriesRoute: typeof StoriesRouteWithChildren
   AdminSourcesRoute: typeof AdminSourcesRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ClaimsClaimIdRoute: typeof ClaimsClaimIdRoute
   CompareClusterIdRoute: typeof CompareClusterIdRoute
   ConsensusClusterIdRoute: typeof ConsensusClusterIdRoute
+  ApiAnalyzeArticleRoute: typeof ApiAnalyzeArticleRoute
+  ApiAnalyzeTextRoute: typeof ApiAnalyzeTextRoute
+  ApiAnalyzeUrlRoute: typeof ApiAnalyzeUrlRoute
+  ApiArticlesIdRoute: typeof ApiArticlesIdRoute
+  ApiStoriesIdRoute: typeof ApiStoriesIdRoute
+  ApiStoriesTop100Route: typeof ApiStoriesTop100Route
+  ApiDebugArticleIdRoute: typeof ApiDebugArticleIdRoute
+  ApiExplainEntityTypeEntityIdRoute: typeof ApiExplainEntityTypeEntityIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -366,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClaimsClaimIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analyze/results': {
       id: '/analyze/results'
       path: '/results'
@@ -386,6 +511,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/stories/$clusterId/$articleId'
       preLoaderRoute: typeof StoriesClusterIdArticleIdRouteImport
       parentRoute: typeof StoriesClusterIdRoute
+    }
+    '/api/stories/top-100': {
+      id: '/api/stories/top-100'
+      path: '/api/stories/top-100'
+      fullPath: '/api/stories/top-100'
+      preLoaderRoute: typeof ApiStoriesTop100RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stories/$id': {
+      id: '/api/stories/$id'
+      path: '/api/stories/$id'
+      fullPath: '/api/stories/$id'
+      preLoaderRoute: typeof ApiStoriesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/articles/$id': {
+      id: '/api/articles/$id'
+      path: '/api/articles/$id'
+      fullPath: '/api/articles/$id'
+      preLoaderRoute: typeof ApiArticlesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/analyze/url': {
+      id: '/api/analyze/url'
+      path: '/api/analyze/url'
+      fullPath: '/api/analyze/url'
+      preLoaderRoute: typeof ApiAnalyzeUrlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/analyze/text': {
+      id: '/api/analyze/text'
+      path: '/api/analyze/text'
+      fullPath: '/api/analyze/text'
+      preLoaderRoute: typeof ApiAnalyzeTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/analyze/article': {
+      id: '/api/analyze/article'
+      path: '/api/analyze/article'
+      fullPath: '/api/analyze/article'
+      preLoaderRoute: typeof ApiAnalyzeArticleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/explain/$entityType/$entityId': {
+      id: '/api/explain/$entityType/$entityId'
+      path: '/api/explain/$entityType/$entityId'
+      fullPath: '/api/explain/$entityType/$entityId'
+      preLoaderRoute: typeof ApiExplainEntityTypeEntityIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/debug/article/$id': {
+      id: '/api/debug/article/$id'
+      path: '/api/debug/article/$id'
+      fullPath: '/api/debug/article/$id'
+      preLoaderRoute: typeof ApiDebugArticleIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -437,9 +618,18 @@ const rootRouteChildren: RootRouteChildren = {
   SourcesRoute: SourcesRoute,
   StoriesRoute: StoriesRouteWithChildren,
   AdminSourcesRoute: AdminSourcesRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ClaimsClaimIdRoute: ClaimsClaimIdRoute,
   CompareClusterIdRoute: CompareClusterIdRoute,
   ConsensusClusterIdRoute: ConsensusClusterIdRoute,
+  ApiAnalyzeArticleRoute: ApiAnalyzeArticleRoute,
+  ApiAnalyzeTextRoute: ApiAnalyzeTextRoute,
+  ApiAnalyzeUrlRoute: ApiAnalyzeUrlRoute,
+  ApiArticlesIdRoute: ApiArticlesIdRoute,
+  ApiStoriesIdRoute: ApiStoriesIdRoute,
+  ApiStoriesTop100Route: ApiStoriesTop100Route,
+  ApiDebugArticleIdRoute: ApiDebugArticleIdRoute,
+  ApiExplainEntityTypeEntityIdRoute: ApiExplainEntityTypeEntityIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

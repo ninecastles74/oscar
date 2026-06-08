@@ -13,6 +13,7 @@ import { buildArticlePageScores, type ArticlePageScores } from "./article-page-s
 import { mergeStoryIntoArticlePageScores } from "../news/article-score-store";
 import {
   getArticleBundle,
+  getArticleBundleHydrated,
   getArticlePageScores,
   getClusterArticlesFromStore,
   getStoredClusterHydrated,
@@ -27,7 +28,7 @@ import { buildFullExplainabilityBundle } from "../reliability/explainability/bui
 import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
 import { buildStoryScoreExplainability } from "../transparency-explainability/build-story-explainability";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
-import { runInWorkerBackground } from "../news/worker-env";
+import { isFeedKvConfigured, runInWorkerBackground } from "../news/worker-env";
 
 const clusterIdSchema = z.object({ clusterId: z.string().min(1) });
 
@@ -252,26 +253,44 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     }
 
     const key = article.id || stableArticleId(article.url);
-    let bundle = getArticleBundle(key);
+    console.log("[loadFeedArticleAnalysis] articleId parsed:", key, "clusterId:", data.clusterId);
+    let bundle = await getArticleBundleHydrated(key);
     if (!bundle) {
-      kickFeedConsensusBackground(cluster, articles);
-      runInWorkerBackground(
+      console.log("[loadFeedArticleAnalysis] no cached bundle — starting analysis");
+      const runAnalysis = () =>
         analyzeArticleHeavyweight(article)
           .then(() => persistFeedToKv())
           .catch((err) => {
             console.error(
-              "[loadFeedArticleAnalysis] background failed:",
+              "[loadFeedArticleAnalysis] analysis failed:",
               err instanceof Error ? err.message : err,
             );
-          }),
-      );
-      return {
-        pendingAnalysis: true as const,
-        clusterId: data.clusterId,
-        articleId: key,
-        title: article.title,
-        message: "Running live Oscar analysis for this article…",
-      };
+          });
+
+      if (isFeedKvConfigured()) {
+        kickFeedConsensusBackground(cluster, articles);
+        runInWorkerBackground(runAnalysis());
+        return {
+          pendingAnalysis: true as const,
+          clusterId: data.clusterId,
+          articleId: key,
+          title: article.title,
+          message: "Running live Oscar analysis for this article…",
+        };
+      }
+
+      try {
+        bundle = await analyzeArticleHeavyweight(article);
+        await persistFeedToKv();
+      } catch (err) {
+        return {
+          error: {
+            code: "ANALYSIS_FAILED",
+            message: err instanceof Error ? err.message : "Article analysis failed",
+          },
+          clusterId: data.clusterId,
+        };
+      }
     }
 
     let storyReport = getStoryConsensus(data.clusterId);

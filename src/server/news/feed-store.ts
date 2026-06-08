@@ -27,6 +27,8 @@ import {
   saveFeedStateToKv,
   slimArticleForPersist,
   slimClusterForPersist,
+  saveArticleBundleToKv,
+  loadArticleBundleFromKv,
   type PersistedFeedState,
 } from "./feed-persist";
 
@@ -313,12 +315,27 @@ export function markArticleAnalyzed(
   });
   state.articleBundles.set(articleId, bundle);
   if (pageScores) saveArticlePageScores(pageScores);
+  void saveArticleBundleToKv(articleId, bundle);
 }
 
 export { getArticlePageScores, saveArticlePageScores };
 
 export function getArticleBundle(articleId: string): AnalyzedArticleBundle | undefined {
   return state.articleBundles.get(articleId);
+}
+
+export async function getArticleBundleHydrated(
+  articleId: string,
+): Promise<AnalyzedArticleBundle | undefined> {
+  const local = state.articleBundles.get(articleId);
+  if (local) return local;
+  const fromKv = await loadArticleBundleFromKv(articleId);
+  if (fromKv) {
+    state.articleBundles.set(articleId, fromKv);
+    console.log("[feed-store] bundle hydrated from KV:", articleId);
+    return fromKv;
+  }
+  return undefined;
 }
 
 /** Find a claim from any analyzed feed article bundle. */
