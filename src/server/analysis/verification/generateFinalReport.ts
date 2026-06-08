@@ -5,6 +5,7 @@ import type {
   SourceComparison,
 } from "@/types/news-platform";
 import { APPROVED_SOURCES } from "../sources";
+import { CLAIM_EVIDENCE_FAILED_WARNING } from "./evidence-messages";
 import type { PipelineArticleContext } from "../types";
 import type {
   ContradictionFinding,
@@ -43,7 +44,9 @@ function buildIssueFlags(
     if (claim.verdict === "insufficient_evidence") {
       flags.push({
         type: "unsupported_claim",
-        description: `Insufficient evidence from approved sources (${claim.citationIds.join(", ") || "none"}).`,
+        description: claim.context?.includes("Live evidence retrieval failed")
+          ? CLAIM_EVIDENCE_FAILED_WARNING
+          : `Insufficient evidence from approved sources.`,
         severity: "info",
         claimId: claim.id,
       });
@@ -100,6 +103,7 @@ export function generateFinalReport(results: VerificationPipelineResults): Analy
     missingContext,
     startedAt,
     articleTopicClassification,
+    pipelineWarnings,
   } = results;
 
   const issueFlags = buildIssueFlags(scoredClaims, contradictions, missingContext);
@@ -147,5 +151,6 @@ export function generateFinalReport(results: VerificationPipelineResults): Analy
     topicClassification: articleTopicClassification,
     generatedAt: new Date().toISOString(),
     processingTimeMs: Date.now() - startedAt,
+    pipelineWarnings,
   };
 }

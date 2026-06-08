@@ -1161,6 +1161,16 @@ export interface AnalysisReport {
 
   /** Article-level claim consensus batch. */
   claimConsensus?: ClaimConsensusBatchReport;
+
+  /** Non-fatal pipeline notices (user-safe; no internal claim IDs in message). */
+  pipelineWarnings?: PipelineWarning[];
+}
+
+/** User-visible pipeline notice. */
+export interface PipelineWarning {
+  code: string;
+  message: string;
+  details?: string;
 }
 
 /** Aggregated issue counts. */

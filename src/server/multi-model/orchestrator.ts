@@ -11,8 +11,10 @@ import type {
   AnalysisReport,
   EvidenceItem,
   MultiModelVerificationReport,
+  Verdict,
 } from "@/types/news-platform";
 import type { VerificationPipelineResults } from "../analysis/verification/types";
+import { CLAIM_EVIDENCE_FAILED_WARNING } from "../analysis/verification/evidence-messages";
 import {
   availableProviders,
   isGeminiLiveEnabled,
@@ -40,6 +42,32 @@ function needsClaudeReview(primary: ModelClaimVerdict, pipeline: { verdict: stri
     primary.confidence < REVIEW_CONFIDENCE_THRESHOLD ||
     REVIEW_VERDICTS.includes(pipeline.verdict as ModelClaimVerdict["verdict"])
   );
+}
+
+function pipelineFallbackVerification(
+  claim: { id: string; text: string; verdict: string; confidence: number },
+  reason: string,
+): import("@/types/news-platform").MultiModelClaimVerification {
+  const verdict = claim.verdict as Verdict;
+  const confidence = claim.confidence;
+  const consensus = buildMultiModelConsensus(
+    claim.id,
+    claim.text,
+    [
+      {
+        provider: "openai",
+        model: "pipeline-fallback",
+        role: "primary",
+        verdict,
+        confidence,
+        reasoning: reason,
+        skipped: true,
+        skipReason: "multi_model_unavailable",
+      },
+    ],
+    { verdict, confidence },
+  );
+  return toClaimVerification(claim.id, claim.text, consensus, ["multi_model_degraded"]);
 }
 
 async function verifyOneClaim(
@@ -178,9 +206,28 @@ async function verifyOneClaim(
 
   if (!corroboration) {
     const err = getLastGeminiError();
-    liveAiError(
-      `Gemini corroboration failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
+    console.warn(
+      `[multi-model] corroboration unavailable for claim ${claim.id}:`,
+      err ?? "(no detail)",
     );
+    stages.push("corroboration_degraded");
+    const prior = review.skipped ? primary : review;
+    corroboration = {
+      provider: "google",
+      model: "unavailable",
+      role: "corroboration",
+      verdict:
+        evidence.length === 0
+          ? ("insufficient_evidence" as const)
+          : prior.verdict,
+      confidence: Math.min(prior.confidence, evidence.length === 0 ? 30 : prior.confidence),
+      reasoning:
+        evidence.length === 0
+          ? "Live evidence retrieval failed for this claim; corroboration skipped."
+          : "Gemini corroboration was temporarily unavailable; using prior model consensus.",
+      skipped: true,
+      skipReason: "gemini_unavailable",
+    };
   }
 
   const modelVerdicts = [primary, review, corroboration];
@@ -258,12 +305,40 @@ export async function runMultiModelVerification(
         ? concurrencyRaw
         : DEFAULT_MANUAL_CONCURRENCY;
 
+  const failedLiveIds = new Set(results.liveEvidenceFailedClaimIds ?? []);
+
   const verifications = await mapWithConcurrency(claims, concurrency, async (claim) => {
     const evidence = results.evidenceByClaimId[claim.id] ?? claim.evidence ?? [];
     const contradiction = results.contradictionAnalyses?.[claim.id];
-    const { verification } = await verifyOneClaim(claim, evidence, contradiction);
-    return verification;
+    try {
+      const { verification } = await verifyOneClaim(claim, evidence, contradiction);
+      return verification;
+    } catch (err) {
+      console.warn(
+        `[multi-model] claim verification degraded (${claim.id.slice(0, 12)}…):`,
+        err instanceof Error ? err.message : err,
+      );
+      return pipelineFallbackVerification(
+        claim,
+        failedLiveIds.has(claim.id)
+          ? CLAIM_EVIDENCE_FAILED_WARNING
+          : "Multi-model verification was temporarily unavailable; using pipeline scores.",
+      );
+    }
   });
+
+  if (verifications.length === 0) {
+    liveAiError("Multi-model verification produced no claim results.");
+  }
+
+  console.log(
+    "[multi-model] verification summary:",
+    JSON.stringify({
+      total: verifications.length,
+      degraded: verifications.filter((v) => v.stagesRun?.includes("multi_model_degraded")).length,
+      liveEvidenceFailed: failedLiveIds.size,
+    }),
+  );
 
   const disagreementCount = verifications.filter(
     (v) => v.consensus.disagreementDetected,
@@ -336,11 +411,28 @@ export async function runMultiModelVerification(
 export function applyMultiModelToReport(
   report: AnalysisReport,
   multiModel: MultiModelVerificationReport,
+  options?: { liveEvidenceFailedClaimIds?: Iterable<string> },
 ): AnalysisReport {
+  const failedLive = new Set(options?.liveEvidenceFailedClaimIds ?? []);
   const byClaim = new Map(multiModel.claims.map((c) => [c.claimId, c]));
   const claims = report.claims.map((c) => {
     const mm = byClaim.get(c.id);
     if (!mm) return c;
+
+    if (failedLive.has(c.id)) {
+      return {
+        ...c,
+        verdict: "insufficient_evidence" as const,
+        confidence: Math.min(c.confidence, 25),
+        evidence: [],
+        context: CLAIM_EVIDENCE_FAILED_WARNING,
+        multiModelVerification: mm,
+        reasoning: [c.reasoning, "Live evidence unavailable — Insufficient Evidence."]
+          .filter(Boolean)
+          .join(" "),
+      };
+    }
+
     return {
       ...c,
       verdict: mm.consensus.finalVerdict,
@@ -382,7 +474,9 @@ export async function enrichVerificationWithMultiModel(
   }
 
   const multiModel = await runMultiModelVerification(bundle.results, { trigger });
-  const report = applyMultiModelToReport(bundle.report, multiModel);
+  const report = applyMultiModelToReport(bundle.report, multiModel, {
+    liveEvidenceFailedClaimIds: bundle.results.liveEvidenceFailedClaimIds,
+  });
   return {
     ...bundle,
     report,

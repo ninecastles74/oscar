@@ -19,6 +19,8 @@ import { ConfidenceBar } from "@/components/confidence-bar";
 import { SourceBadge } from "@/features/sources/source-badge";
 import { VerdictBadge } from "./verdict-badge";
 
+const LIVE_EVIDENCE_FAILED_MSG = "Live evidence retrieval failed for this claim.";
+
 export function ClaimPanel({
   claim,
   defaultOpen,
@@ -66,7 +68,10 @@ export function ClaimPanel({
           {claim.context && (
             <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-xs">
               <div className="mb-1 flex items-center gap-1.5 font-semibold uppercase tracking-wide text-warning">
-                <AlertTriangle className="h-3 w-3" /> Missing context
+                <AlertTriangle className="h-3 w-3" />{" "}
+                {claim.context === LIVE_EVIDENCE_FAILED_MSG
+                  ? "Limited verification"
+                  : "Missing context"}
               </div>
               <p className="text-foreground/80">{claim.context}</p>
             </div>

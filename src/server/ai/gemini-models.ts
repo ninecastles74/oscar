@@ -5,7 +5,6 @@ export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 
 /** Valid Gemini model IDs per https://ai.google.dev/gemini-api/docs/models */
 export const GEMINI_MODEL_FALLBACKS = [
-  "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
   "gemini-2.5-pro",
 ] as const;
@@ -15,7 +14,20 @@ export function resolveGeminiVerificationModel(): string {
   return fromEnv || GEMINI_DEFAULT_MODEL;
 }
 
+/** Used when primary model fails (503, timeout, parse error). Default: gemini-2.0-flash */
+export function resolveGeminiFallbackModel(): string {
+  const fromEnv = getServerEnv("GEMINI_FALLBACK_MODEL")?.trim();
+  return fromEnv || "gemini-2.0-flash";
+}
+
+/** Primary → explicit fallback → other known-good models (deduped). */
 export function geminiModelCandidates(override?: string): string[] {
   const primary = override?.trim() || resolveGeminiVerificationModel();
-  return [...new Set([primary, ...GEMINI_MODEL_FALLBACKS].filter(Boolean))];
+  const explicitFallback = resolveGeminiFallbackModel();
+  return [...new Set([primary, explicitFallback, ...GEMINI_MODEL_FALLBACKS].filter(Boolean))];
+}
+
+/** Models to try for live web evidence (primary + fallback first). */
+export function geminiEvidenceModelCandidates(): string[] {
+  return geminiModelCandidates(resolveGeminiVerificationModel());
 }

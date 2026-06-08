@@ -5,6 +5,7 @@ import type {
   EvidenceItem,
   IssueFlag,
   IssueSummary,
+  PipelineWarning,
   SourceComparison,
   TopicClassification,
   Verdict,
@@ -62,6 +63,8 @@ export interface VerificationPipelineResults {
   issueFlags: IssueFlag[];
   issueSummary: IssueSummary;
   startedAt: number;
+  pipelineWarnings?: PipelineWarning[];
+  liveEvidenceFailedClaimIds?: string[];
 }
 
 export interface VerificationReportBundle {

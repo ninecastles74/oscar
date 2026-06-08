@@ -46,15 +46,19 @@ export function assertLiveAnalysisReport(
   const gu = report.multiModelVerification.geminiUsage;
   const liveCalls = gu?.liveApiCalls ?? 0;
   const liveEvidence = gu?.liveEvidenceClaims ?? 0;
-  if (liveCalls === 0 && liveEvidence === 0) {
-    const attempts = getLastGeminiAttemptLog();
-    const err = gu?.lastApiError ?? getLastGeminiError();
-    const detail = attempts.length ? attempts.join("; ") : err;
+  const hasPartialEvidenceWarning = report.pipelineWarnings?.some(
+    (w) => w.code === "PARTIAL_LIVE_EVIDENCE",
+  );
+  const hasAnyScoredClaims = (report.claims?.length ?? 0) > 0;
+
+  if (liveCalls === 0 && liveEvidence === 0 && !hasPartialEvidenceWarning && !hasAnyScoredClaims) {
+    console.error(
+      "[live-ai-guard] no live AI signals",
+      getLastGeminiAttemptLog().join("; ") || getLastGeminiError(),
+    );
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
-      detail
-        ? `No successful live Gemini calls. ${detail}`
-        : "No successful live Gemini calls. Set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash (or gemini-3.5-flash) and check API quota.",
+      "Analysis could not complete with live AI. Check API keys and quota, then retry in a few minutes.",
       503,
     );
   }

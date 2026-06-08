@@ -7,6 +7,7 @@ import type {
   ScoredClaim,
 } from "./types";
 import { VERDICT_LABELS } from "./types";
+import { CLAIM_EVIDENCE_FAILED_WARNING } from "./evidence-messages";
 
 function countStances(evidence: EvidenceItem[]) {
   return {
@@ -49,9 +50,13 @@ export function scoreConfidence(
   evidenceByClaimId: Record<string, EvidenceItem[]>,
   contradictions: ContradictionFinding[],
   missingContext: MissingContextFinding[],
+  options?: { liveEvidenceFailedClaimIds?: Set<string> },
 ): ScoredClaim[] {
+  const failedLive = options?.liveEvidenceFailedClaimIds ?? new Set<string>();
+
   return claims.map((claim) => {
     const evidence = evidenceByClaimId[claim.id] ?? [];
+    const liveEvidenceFailed = failedLive.has(claim.id);
     const { support, contradict, neutral } = countStances(evidence);
     const weighted = weightedSupportScore(evidence);
     const claimContras = contradictions.filter((c) => c.claimId === claim.id);
@@ -87,6 +92,11 @@ export function scoreConfidence(
       confidence = 30 + support * 5;
     }
 
+    if (liveEvidenceFailed) {
+      verdict = "insufficient_evidence";
+      confidence = Math.min(confidence, 25);
+    }
+
     if (claimMissing.length > 0 && verdict === "supported") {
       verdict = "unclear";
       confidence = Math.min(confidence, 62);
@@ -99,15 +109,17 @@ export function scoreConfidence(
 
     const reasoning = buildReasoning(verdict, evidence, citationIds, claimContras, claimMissing);
 
-    const context =
-      claimMissing[0]?.description ?? (claimContras[0] ? claimContras[0].description : undefined);
+    const context = liveEvidenceFailed
+      ? CLAIM_EVIDENCE_FAILED_WARNING
+      : (claimMissing[0]?.description ??
+        (claimContras[0] ? claimContras[0].description : undefined));
 
     const scored: ScoredClaim = {
       id: claim.id,
       text: claim.text,
       verdict,
       confidence,
-      evidence,
+      evidence: liveEvidenceFailed ? [] : evidence,
       reasoning,
       context,
       citationIds,

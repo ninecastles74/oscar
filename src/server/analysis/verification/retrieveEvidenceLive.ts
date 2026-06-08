@@ -1,18 +1,33 @@
 import type { EvidenceItem } from "@/types/news-platform";
 import { geminiGenerateContent, groundingToSourceList } from "../../ai/gemini-client";
-import { resolveGeminiVerificationModel } from "../../ai/gemini-models";
+import {
+  geminiEvidenceModelCandidates,
+  resolveGeminiFallbackModel,
+  resolveGeminiVerificationModel,
+} from "../../ai/gemini-models";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
+import { openAiChatCompletion } from "../../ai/openai-client";
+import { resolveOpenAiTopicModel } from "../../ai/openai-models";
+import { isOpenAiConfigured, isServerEnvTruthy } from "../../env/server-env";
 import { getServerEnv } from "../../env/server-env";
+import { fetchWithTimeout } from "../../utils/fetch-timeout";
+import { sanitizeApiSecretOrUndefined } from "../../ai/sanitize-api-secret";
+import { env as cloudflareEnv } from "cloudflare:workers";
 import type { ClassifiedClaim } from "./types";
 
-/** Max claims to research per analysis (aligned with multi-model cap). */
 const MAX_TOTAL_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
-/** Claims per batched Google Search call (smaller JSON = more claims covered). */
 const BATCH_SIZE = Number(getServerEnv("LIVE_EVIDENCE_BATCH_SIZE")) || 2;
-/** Max per-claim retry calls after batching (avoids wall-timeout on free tier). */
-const MAX_SINGLE_RETRIES =
-  Number(getServerEnv("LIVE_EVIDENCE_MAX_SINGLE_RETRIES")) || 2;
-const EVIDENCE_MODEL = resolveGeminiVerificationModel();
+const MAX_CLAIM_RETRIES = Number(getServerEnv("LIVE_EVIDENCE_CLAIM_RETRIES")) || 2;
+const CLAIM_TIMEOUT_MS = Number(getServerEnv("LIVE_EVIDENCE_CLAIM_TIMEOUT_MS")) || 45_000;
+const BACKOFF_BASE_MS = Number(getServerEnv("LIVE_EVIDENCE_BACKOFF_MS")) || 1500;
+
+export interface LiveEvidenceRetrievalResult {
+  evidenceByClaimId: Record<string, EvidenceItem[]>;
+  succeededClaimIds: string[];
+  failedClaimIds: string[];
+  fallbackModelUsed?: string;
+  providerFallbackUsed?: "openai" | "anthropic";
+}
 
 interface BatchedEvidencePayload {
   claims?: Array<{
@@ -24,6 +39,14 @@ interface BatchedEvidencePayload {
       stance?: "support" | "contradict" | "neutral";
     }>;
   }>;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function claimLabel(claim: ClassifiedClaim, index: number): string {
+  return `claim ${index + 1}`;
 }
 
 function parseBatchedEvidence(raw: string): BatchedEvidencePayload["claims"] | null {
@@ -66,9 +89,10 @@ function makeItem(
   excerpt: string,
   url: string,
   stance: EvidenceItem["stance"],
+  suffix = "live-e",
 ): EvidenceItem {
   return {
-    id: `${claimId}-live-e${index + 1}`,
+    id: `${claimId}-${suffix}${index + 1}`,
     sourceId: sourceName.toLowerCase().replace(/\s+/g, "_").slice(0, 40),
     sourceName,
     excerpt: excerpt.slice(0, 400),
@@ -83,12 +107,13 @@ function makeItem(
 function evidenceFromParsed(
   claimId: string,
   parsed: NonNullable<BatchedEvidencePayload["claims"]>[number]["evidence"],
+  suffix = "live-e",
 ): EvidenceItem[] {
   const items: EvidenceItem[] = [];
   parsed?.slice(0, 4).forEach((e, i) => {
     const stance = e.stance === "contradict" || e.stance === "neutral" ? e.stance : "support";
     items.push(
-      makeItem(claimId, i, e.sourceName || "Web source", e.excerpt, e.url ?? "", stance),
+      makeItem(claimId, i, e.sourceName || "Web source", e.excerpt, e.url ?? "", stance, suffix),
     );
   });
   return items;
@@ -117,7 +142,6 @@ function applyGroundingFallback(
         "neutral",
       ),
     ];
-    console.log(`[retrieveEvidenceLive] ${claim.id}: grounding fallback source`);
   }
 }
 
@@ -134,14 +158,165 @@ function applyGeminiResult(
       const claimId = resolveClaimId(row.claimId, claims);
       if (!claimId) continue;
       const items = evidenceFromParsed(claimId, row.evidence);
-      if (items.length > 0) {
-        out[claimId] = items;
-        console.log(`[retrieveEvidenceLive] ${claimId}: ${items.length} live source(s)`);
-      }
+      if (items.length > 0) out[claimId] = items;
     }
   }
 
   applyGroundingFallback(claims, result, out);
+}
+
+async function geminiResearchClaim(
+  claim: ClassifiedClaim,
+  model: string,
+): Promise<Awaited<ReturnType<typeof geminiGenerateContent>>> {
+  return geminiGenerateContent({
+    model,
+    useGoogleSearch: true,
+    timeoutMs: CLAIM_TIMEOUT_MS,
+    system: "You are a news fact-check researcher. Use Google Search. Return JSON only.",
+    user: `Research this claim with Google Search. Return JSON:
+{"claims":[{"claimId":"${claim.id}","evidence":[{"sourceName":"Outlet","url":"https://...","excerpt":"max 200 chars","stance":"support"|"contradict"|"neutral"}]}]}
+
+Claim (${claim.id}): "${claim.text}"`,
+  });
+}
+
+async function researchClaimWithGeminiRetries(
+  claim: ClassifiedClaim,
+  claimIndex: number,
+  out: Record<string, EvidenceItem[]>,
+): Promise<{ ok: boolean; fallbackModelUsed?: string }> {
+  if (out[claim.id]?.length) return { ok: true };
+
+  const models = geminiEvidenceModelCandidates();
+  let fallbackModelUsed: string | undefined;
+
+  for (let attempt = 0; attempt <= MAX_CLAIM_RETRIES; attempt++) {
+    for (const model of models) {
+      if (model !== models[0]) fallbackModelUsed = model;
+      try {
+        const result = await geminiResearchClaim(claim, model);
+        applyGeminiResult([claim], result, out);
+        if (out[claim.id]?.length) {
+          console.log(
+            `[retrieveEvidenceLive] ${claimLabel(claim, claimIndex)} succeeded via ${result?.model ?? model}`,
+          );
+          return { ok: true, fallbackModelUsed };
+        }
+      } catch (err) {
+        console.warn(
+          `[retrieveEvidenceLive] ${claimLabel(claim, claimIndex)} gemini error (${model}):`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    if (attempt < MAX_CLAIM_RETRIES) {
+      const backoff = BACKOFF_BASE_MS * 2 ** attempt;
+      console.warn(
+        `[retrieveEvidenceLive] ${claimLabel(claim, claimIndex)} retry ${attempt + 1}/${MAX_CLAIM_RETRIES} in ${backoff}ms`,
+      );
+      await sleep(backoff);
+    }
+  }
+
+  return { ok: false, fallbackModelUsed };
+}
+
+const EVIDENCE_JSON_PROMPT = `Return JSON only:
+{"claims":[{"claimId":"<id>","evidence":[{"sourceName":"Outlet","url":"https://...","excerpt":"max 200 chars","stance":"support"|"contradict"|"neutral"}]}]}`;
+
+async function researchClaimWithOpenAI(
+  claim: ClassifiedClaim,
+  claimIndex: number,
+): Promise<EvidenceItem[]> {
+  if (!isOpenAiConfigured()) return [];
+
+  const raw = await openAiChatCompletion({
+    model: resolveOpenAiTopicModel(),
+    system:
+      "You are a news fact-check researcher. Suggest real, citable sources and short excerpts relevant to the claim. Return JSON only.",
+    user: `${EVIDENCE_JSON_PROMPT}\n\nclaimId="${claim.id}"\nClaim: "${claim.text}"`,
+    timeoutMs: CLAIM_TIMEOUT_MS,
+    maxTokens: 1024,
+  });
+
+  if (!raw) return [];
+
+  const parsed = parseBatchedEvidence(raw);
+  const row = parsed?.find((r) => resolveClaimId(r.claimId, [claim]) === claim.id) ?? parsed?.[0];
+  if (!row?.evidence?.length) return [];
+
+  const items = evidenceFromParsed(claim.id, row.evidence, "openai-e");
+  if (items.length) {
+    console.log(
+      `[retrieveEvidenceLive] ${claimLabel(claim, claimIndex)} succeeded via OpenAI fallback`,
+    );
+  }
+  return items;
+}
+
+function anthropicKey(): string | undefined {
+  const v = (cloudflareEnv as Record<string, unknown>).ANTHROPIC_API_KEY;
+  if (typeof v === "string" && v.trim()) {
+    return sanitizeApiSecretOrUndefined(v);
+  }
+  return sanitizeApiSecretOrUndefined(getServerEnv("ANTHROPIC_API_KEY"));
+}
+
+async function researchClaimWithAnthropic(
+  claim: ClassifiedClaim,
+  claimIndex: number,
+): Promise<EvidenceItem[]> {
+  const apiKey = anthropicKey();
+  if (!apiKey || !isServerEnvTruthy("ANTHROPIC_API_KEY")) return [];
+
+  try {
+    const res = await fetchWithTimeout(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: getServerEnv("ANTHROPIC_VERIFICATION_MODEL") ?? "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          temperature: 0,
+          system:
+            "You are a news fact-check researcher. Suggest real sources and excerpts. Return JSON only.",
+          messages: [
+            {
+              role: "user",
+              content: `${EVIDENCE_JSON_PROMPT}\n\nclaimId="${claim.id}"\nClaim: "${claim.text}"`,
+            },
+          ],
+        }),
+      },
+      CLAIM_TIMEOUT_MS,
+    );
+
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const raw = data.content?.find((c) => c.type === "text")?.text;
+    if (!raw) return [];
+
+    const parsed = parseBatchedEvidence(raw);
+    const row = parsed?.find((r) => resolveClaimId(r.claimId, [claim]) === claim.id) ?? parsed?.[0];
+    if (!row?.evidence?.length) return [];
+
+    const items = evidenceFromParsed(claim.id, row.evidence, "claude-e");
+    if (items.length) {
+      console.log(
+        `[retrieveEvidenceLive] ${claimLabel(claim, claimIndex)} succeeded via Anthropic fallback`,
+      );
+    }
+    return items;
+  } catch {
+    return [];
+  }
 }
 
 async function researchClaimBatch(
@@ -153,9 +328,11 @@ async function researchClaimBatch(
   const claimLines = batch
     .map((c, i) => `${i + 1}. claimId="${c.id}" (use exactly): "${c.text}"`)
     .join("\n");
+
   const result = await geminiGenerateContent({
-    model: EVIDENCE_MODEL,
+    model: resolveGeminiVerificationModel(),
     useGoogleSearch: true,
+    timeoutMs: CLAIM_TIMEOUT_MS,
     system:
       "You are a news fact-check researcher. Use Google Search to find real sources. Return JSON only with exact claimId values from the input.",
     user: `Research EACH claim below using Google Search. Return one entry per claim in JSON:
@@ -166,49 +343,101 @@ ${claimLines}
 
 Include 1-2 evidence items per claim.`,
   });
+
   applyGeminiResult(batch, result, out);
 }
 
-async function researchSingleClaim(
-  claim: ClassifiedClaim,
-  out: Record<string, EvidenceItem[]>,
-): Promise<void> {
-  if (out[claim.id]?.length) return;
-
-  const result = await geminiGenerateContent({
-    model: EVIDENCE_MODEL,
-    useGoogleSearch: true,
-    system: "You are a news fact-check researcher. Use Google Search. Return JSON only.",
-    user: `Research this claim with Google Search. Return JSON:
-{"claims":[{"claimId":"${claim.id}","evidence":[{"sourceName":"Outlet","url":"https://...","excerpt":"max 200 chars","stance":"support"|"contradict"|"neutral"}]}]}
-
-Claim (${claim.id}): "${claim.text}"`,
-  });
-  applyGeminiResult([claim], result, out);
-}
-
 /**
- * Live web research — batched Gemini + Google Search for every claim (with per-claim retry).
+ * Live web research with per-claim retries, Gemini fallback model, and OpenAI/Claude fallback.
+ * Partial failures do not throw — caller receives succeeded/failed claim lists.
  */
 export async function retrieveEvidenceLive(
   claims: ClassifiedClaim[],
-): Promise<Record<string, EvidenceItem[]>> {
-  if (!isGoogleAiConfigured()) return {};
+): Promise<LiveEvidenceRetrievalResult> {
+  const empty: LiveEvidenceRetrievalResult = {
+    evidenceByClaimId: {},
+    succeededClaimIds: [],
+    failedClaimIds: [],
+  };
+
+  if (!isGoogleAiConfigured()) return empty;
 
   const toResearch = claims.slice(0, MAX_TOTAL_CLAIMS);
-  if (toResearch.length === 0) return {};
+  if (toResearch.length === 0) return empty;
 
   const out: Record<string, EvidenceItem[]> = {};
+  let fallbackModelUsed: string | undefined;
+  let providerFallbackUsed: "openai" | "anthropic" | undefined;
 
   for (let i = 0; i < toResearch.length; i += BATCH_SIZE) {
     const chunk = toResearch.slice(i, i + BATCH_SIZE);
     await researchClaimBatch(chunk, out);
   }
 
-  const missing = toResearch.filter((c) => !out[c.id]?.length);
-  for (const claim of missing.slice(0, MAX_SINGLE_RETRIES)) {
-    await researchSingleClaim(claim, out);
+  for (let i = 0; i < toResearch.length; i++) {
+    const claim = toResearch[i]!;
+    if (out[claim.id]?.length) continue;
+
+    const gem = await researchClaimWithGeminiRetries(claim, i, out);
+    if (gem.fallbackModelUsed) fallbackModelUsed = gem.fallbackModelUsed;
+    if (out[claim.id]?.length) continue;
+
+    const openAiItems = await researchClaimWithOpenAI(claim, i);
+    if (openAiItems.length) {
+      out[claim.id] = openAiItems;
+      providerFallbackUsed = "openai";
+      continue;
+    }
+
+    const claudeItems = await researchClaimWithAnthropic(claim, i);
+    if (claudeItems.length) {
+      out[claim.id] = claudeItems;
+      providerFallbackUsed = "anthropic";
+    }
   }
 
-  return out;
+  const succeededClaimIds = toResearch.filter((c) => (out[c.id]?.length ?? 0) > 0).map((c) => c.id);
+  const failedClaimIds = toResearch.filter((c) => !out[c.id]?.length).map((c) => c.id);
+
+  console.log(
+    "[retrieveEvidenceLive] summary:",
+    JSON.stringify({
+      total: toResearch.length,
+      succeeded: succeededClaimIds.length,
+      failed: failedClaimIds.length,
+      fallbackModel: fallbackModelUsed ?? resolveGeminiFallbackModel(),
+      providerFallback: providerFallbackUsed ?? null,
+    }),
+  );
+
+  if (succeededClaimIds.length) {
+    console.log(
+      "[retrieveEvidenceLive] succeeded:",
+      succeededClaimIds
+        .map((id) => {
+          const idx = toResearch.findIndex((c) => c.id === id);
+          return claimLabel(toResearch[idx]!, idx);
+        })
+        .join(", "),
+    );
+  }
+  if (failedClaimIds.length) {
+    console.log(
+      "[retrieveEvidenceLive] failed:",
+      failedClaimIds
+        .map((id) => {
+          const idx = toResearch.findIndex((c) => c.id === id);
+          return claimLabel(toResearch[idx]!, idx);
+        })
+        .join(", "),
+    );
+  }
+
+  return {
+    evidenceByClaimId: out,
+    succeededClaimIds,
+    failedClaimIds,
+    fallbackModelUsed,
+    providerFallbackUsed,
+  };
 }

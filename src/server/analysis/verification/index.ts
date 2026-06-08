@@ -6,11 +6,13 @@ import { runContradictionAnalysisBatch } from "../../contradiction";
 import { extractClaimsWithLlm } from "./extractClaimsLlm";
 import { generateFinalReport } from "./generateFinalReport";
 import { retrieveEvidenceLive } from "./retrieveEvidenceLive";
+import {
+  buildPartialEvidenceWarning,
+} from "./evidence-messages";
 import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
-import { getLastGeminiAttemptLog, getLastGeminiError } from "../../ai/gemini-client";
 import { AnalysisError } from "../errors";
 
 export { VERDICT_LABELS } from "./types";
@@ -32,6 +34,7 @@ export async function runVerificationPipeline(
 
   const startedAt = Date.now();
   const stages: string[] = [];
+  const pipelineWarnings: VerificationPipelineResults["pipelineWarnings"] = [];
 
   stages.push("extractClaims");
   const raw = await extractClaimsWithLlm(article.analysisText, article.submissionId);
@@ -62,21 +65,44 @@ export async function runVerificationPipeline(
   }));
 
   stages.push("retrieveEvidence");
-  const evidenceByClaimId = await retrieveEvidenceLive(classifiedWithTopics);
-  const missingLive = classifiedWithTopics.filter((c) => !evidenceByClaimId[c.id]?.length);
-  if (missingLive.length > 0) {
-    const hint = getLastGeminiError();
-    const attempts = getLastGeminiAttemptLog();
-    const detail = attempts.length ? attempts.join("; ") : hint;
-    throw new AnalysisError(
-      "LIVE_AI_REQUIRED",
-      `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s). Missing: ${missingLive.map((c) => c.id).join(", ")}.${
-        detail ? ` ${detail}` : " Check Gemini quota or set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash"
-      }`,
-      503,
+  const evidenceResult = await retrieveEvidenceLive(classifiedWithTopics);
+  const evidenceByClaimId = evidenceResult.evidenceByClaimId;
+  const failedEvidenceIds = new Set(evidenceResult.failedClaimIds);
+
+  if (evidenceResult.failedClaimIds.length > 0) {
+    if (evidenceResult.succeededClaimIds.length === 0) {
+      console.warn(
+        "[verification] all claims failed live evidence retrieval — continuing with Insufficient Evidence fallbacks",
+      );
+      stages.push("retrieveEvidenceLiveAllFailed");
+    } else {
+      console.warn(
+        `[verification] partial live evidence: ${evidenceResult.succeededClaimIds.length}/${classifiedWithTopics.length} succeeded`,
+      );
+      stages.push("retrieveEvidenceLivePartial");
+    }
+
+    pipelineWarnings.push(
+      buildPartialEvidenceWarning({
+        succeeded: evidenceResult.succeededClaimIds.length,
+        failed: evidenceResult.failedClaimIds.length,
+        total: classifiedWithTopics.length,
+        adminDetail: [
+          evidenceResult.fallbackModelUsed
+            ? `fallbackModel=${evidenceResult.fallbackModelUsed}`
+            : null,
+          evidenceResult.providerFallbackUsed
+            ? `providerFallback=${evidenceResult.providerFallbackUsed}`
+            : null,
+          `failedCount=${evidenceResult.failedClaimIds.length}`,
+        ]
+          .filter(Boolean)
+          .join("; "),
+      }),
     );
+  } else {
+    stages.push("retrieveEvidenceLive");
   }
-  stages.push("retrieveEvidenceLive");
 
   stages.push("compareSources");
   const comparisons = compareSources(classifiedWithTopics, evidenceByClaimId);
@@ -94,6 +120,7 @@ export async function runVerificationPipeline(
     evidenceByClaimId,
     contradictions,
     missingContext,
+    { liveEvidenceFailedClaimIds: failedEvidenceIds },
   );
 
   stages.push("researchClaims");
@@ -120,15 +147,29 @@ export async function runVerificationPipeline(
       missingContext: missingContext.length,
       emotionalLanguage: 0,
       unsupportedClaims: researchedClaims.filter(
-        (c) => c.claimResearch?.unsupported.isUnsupported,
+        (c) => c.verdict === "insufficient_evidence",
       ).length,
       totalClaims: scoredClaims.length,
     },
     startedAt,
+    pipelineWarnings: pipelineWarnings.length > 0 ? pipelineWarnings : undefined,
+    liveEvidenceFailedClaimIds:
+      failedEvidenceIds.size > 0 ? [...failedEvidenceIds] : undefined,
   };
 
   stages.push("generateFinalReport");
   const report = generateFinalReport(results);
+
+  console.log(
+    "[verification] pipeline complete:",
+    JSON.stringify({
+      claimsReturned: report.claims.length,
+      insufficientEvidence: report.claims.filter((c) => c.verdict === "insufficient_evidence")
+        .length,
+      pipelineWarnings: pipelineWarnings.length,
+      liveEvidenceFailed: failedEvidenceIds.size,
+    }),
+  );
 
   return { report, results, stages };
 }
