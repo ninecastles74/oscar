@@ -32,7 +32,6 @@ import {
   syncManualRequest,
   syncManualSubmission,
 } from "./manual-persist";
-import { sanitizeUserFacingAnalysisError } from "../ai/gemini-resilience";
 
 const MANUAL_ANALYSIS_WALL_MS =
   Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 10 * 60 * 1000;
@@ -152,11 +151,10 @@ export async function executeManualAnalysis(
   };
 
   const failRequest = async (message: string) => {
-    const userMessage = sanitizeUserFacingAnalysisError(message);
     submission.status = "failed";
-    submission.error = userMessage;
+    submission.error = message;
     request.status = "failed";
-    request.error = userMessage;
+    request.error = message;
     request.completedAt = new Date().toISOString();
     await syncManualSubmission(submission);
     await syncManualRequest(request);

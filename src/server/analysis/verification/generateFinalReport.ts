@@ -100,7 +100,6 @@ export function generateFinalReport(results: VerificationPipelineResults): Analy
     missingContext,
     startedAt,
     articleTopicClassification,
-    pipelineWarnings,
   } = results;
 
   const issueFlags = buildIssueFlags(scoredClaims, contradictions, missingContext);
@@ -148,6 +147,5 @@ export function generateFinalReport(results: VerificationPipelineResults): Analy
     topicClassification: articleTopicClassification,
     generatedAt: new Date().toISOString(),
     processingTimeMs: Date.now() - startedAt,
-    pipelineWarnings,
   };
 }

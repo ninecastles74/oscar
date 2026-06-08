@@ -8,7 +8,6 @@ import type {
   SourceComparison,
   TopicClassification,
   Verdict,
-  PipelineWarning,
 } from "@/types/news-platform";
 import type { PipelineArticleContext } from "../types";
 
@@ -63,7 +62,6 @@ export interface VerificationPipelineResults {
   issueFlags: IssueFlag[];
   issueSummary: IssueSummary;
   startedAt: number;
-  pipelineWarnings?: PipelineWarning[];
 }
 
 export interface VerificationReportBundle {

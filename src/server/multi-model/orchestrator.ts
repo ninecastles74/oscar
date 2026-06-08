@@ -1,10 +1,5 @@
 import { getLastGeminiError } from "../ai/gemini-client";
 import { getLastOpenAiError } from "../ai/openai-client";
-import {
-  GEMINI_CAPACITY_USER_MESSAGE,
-  getLastGeminiFallbackModel,
-  hadGeminiCapacityFailure,
-} from "../ai/gemini-resilience";
 import { AnalysisError } from "../analysis/errors";
 import {
   hasAnyAiApiKey,
@@ -15,10 +10,7 @@ import {
 import type {
   AnalysisReport,
   EvidenceItem,
-  ModelProviderId,
-  ModelVerificationRole,
   MultiModelVerificationReport,
-  Verdict,
 } from "@/types/news-platform";
 import type { VerificationPipelineResults } from "../analysis/verification/types";
 import {
@@ -38,28 +30,8 @@ import { verifyClaimWithOpenAI } from "./providers/openai";
 import type { ModelClaimVerdict } from "@/types/news-platform";
 import { clampScore } from "../reliability/utils/math";
 
-function degradedModelVerdict(
-  role: ModelVerificationRole,
-  pipeline: { verdict: Verdict; confidence: number },
-  reason: string,
-  provider: ModelProviderId = "google",
-): ModelClaimVerdict {
-  const verdict: Verdict =
-    pipeline.verdict === "supported" && role === "corroboration"
-      ? "unclear"
-      : pipeline.verdict === "supported"
-        ? "insufficient_evidence"
-        : pipeline.verdict;
-  return {
-    provider,
-    model: "unavailable",
-    role,
-    verdict,
-    confidence: Math.min(pipeline.confidence, 45),
-    reasoning: reason,
-    skipped: true,
-    skipReason: "gemini_capacity",
-  };
+function liveAiError(message: string): never {
+  throw new AnalysisError("LIVE_AI_REQUIRED", message, 503);
 }
 
 function needsClaudeReview(primary: ModelClaimVerdict, pipeline: { verdict: string; confidence: number }): boolean {
@@ -83,7 +55,7 @@ async function verifyOneClaim(
   }));
 
   const pipelineFallback = {
-    verdict: claim.verdict as Verdict,
+    verdict: claim.verdict as import("@/types/news-platform").Verdict,
     confidence: claim.confidence,
   };
 
@@ -97,15 +69,12 @@ async function verifyOneClaim(
       role: "primary",
     });
     if (!primary) {
-      console.warn(
-        "[multi-model] OpenAI primary failed:",
-        claim.id,
-        getLastOpenAiError() ?? "(no detail)",
+      const err = getLastOpenAiError();
+      liveAiError(
+        `OpenAI primary verification failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
       );
     }
-  }
-
-  if (!primary && isGeminiLiveEnabled()) {
+  } else if (isGeminiLiveEnabled()) {
     stages.push("gemini_primary");
     primary = await verifyClaimWithGemini({
       claimId: claim.id,
@@ -114,35 +83,10 @@ async function verifyOneClaim(
       role: "primary",
     });
     if (!primary) {
-      console.warn(
-        "[multi-model] Gemini primary failed:",
-        claim.id,
-        getLastGeminiError() ?? "(capacity or parse error)",
-      );
+      liveAiError(`Gemini primary verification failed for claim "${claim.text.slice(0, 80)}…"`);
     }
-  }
-
-  if (!primary && isServerEnvTruthy("ANTHROPIC_API_KEY")) {
-    stages.push("claude_primary_fallback");
-    primary = await verifyClaimWithAnthropic({
-      claimId: claim.id,
-      claimText: claim.text,
-      evidence: evidencePayload,
-      role: "primary",
-    });
-    if (!primary) {
-      console.warn("[multi-model] Claude primary fallback failed:", claim.id);
-    }
-  }
-
-  if (!primary) {
-    stages.push("primary_degraded");
-    primary = degradedModelVerdict(
-      "primary",
-      pipelineFallback,
-      "Live model verification was temporarily unavailable; using evidence-based pipeline scoring.",
-      isOpenAiConfigured() ? "openai" : "google",
-    );
+  } else {
+    liveAiError("Configure OPENAI_API_KEY or GEMINI_API_KEY for live multi-model verification.");
   }
 
   let review: ModelClaimVerdict | null = null;
@@ -158,15 +102,12 @@ async function verifyOneClaim(
         priorVerdict: primary,
       });
       if (!review) {
-        console.warn(
-          "[multi-model] Anthropic review failed:",
-          claim.id,
-          getLastAnthropicError() ?? "(no detail)",
+        const err = getLastAnthropicError();
+        liveAiError(
+          `Anthropic review failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
         );
       }
-    }
-
-    if (!review && isGeminiLiveEnabled()) {
+    } else if (isGeminiLiveEnabled()) {
       stages.push("gemini_review");
       review = await verifyClaimWithGemini({
         claimId: claim.id,
@@ -176,37 +117,10 @@ async function verifyOneClaim(
         priorVerdict: primary,
       });
       if (!review) {
-        console.warn(
-          "[multi-model] Gemini review failed:",
-          claim.id,
-          getLastGeminiError() ?? "(capacity or parse error)",
-        );
+        liveAiError(`Gemini review failed for claim "${claim.text.slice(0, 80)}…"`);
       }
-    }
-
-    if (!review && isOpenAiConfigured()) {
-      stages.push("openai_review_fallback");
-      review = await verifyClaimWithOpenAI({
-        claimId: claim.id,
-        claimText: claim.text,
-        evidence: evidencePayload,
-        role: "review",
-      });
-    }
-
-    if (!review) {
-      stages.push("review_degraded");
-      review = {
-        provider: primary.provider,
-        model: "skipped",
-        role: "review",
-        verdict: primary.skipped ? pipelineFallback.verdict : primary.verdict,
-        confidence: Math.min(primary.confidence, pipelineFallback.confidence),
-        reasoning:
-          "Review step skipped — upstream models were temporarily unavailable; using primary/pipeline verdict.",
-        skipped: true,
-        skipReason: "gemini_capacity",
-      };
+    } else {
+      liveAiError("Uncertain claim requires Anthropic or Gemini for live review.");
     }
   } else {
     review = {
@@ -219,6 +133,10 @@ async function verifyOneClaim(
       skipped: true,
       skipReason: "not_uncertain",
     };
+  }
+
+  if (!isGeminiLiveEnabled()) {
+    liveAiError("GEMINI_API_KEY is required for live corroboration with Google Search.");
   }
 
   const hasLiveWebEvidence = evidence.some((e) => e.id?.includes("-live-e"));
@@ -246,7 +164,7 @@ async function verifyOneClaim(
           .map((e) => ({ title: e.sourceName, uri: e.url })),
       },
     };
-  } else if (isGeminiLiveEnabled()) {
+  } else {
     stages.push("gemini_corroboration");
     corroboration = await verifyClaimWithGemini({
       claimId: claim.id,
@@ -256,21 +174,12 @@ async function verifyOneClaim(
       priorVerdict: review.skipped ? primary : review,
       skipGoogleSearch: false,
     });
-    if (!corroboration) {
-      console.warn(
-        "[multi-model] Gemini corroboration failed:",
-        claim.id,
-        getLastGeminiError() ?? "(capacity or parse error)",
-      );
-    }
   }
 
   if (!corroboration) {
-    stages.push("corroboration_degraded");
-    corroboration = degradedModelVerdict(
-      "corroboration",
-      pipelineFallback,
-      "Gemini corroboration with Google Search was temporarily unavailable. Consensus uses OpenAI/Claude reasoning.",
+    const err = getLastGeminiError();
+    liveAiError(
+      `Gemini corroboration failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
     );
   }
 
@@ -392,9 +301,6 @@ export async function runMultiModelVerification(
   }
 
   const liveEvidenceClaims = countLiveEvidenceClaims(results);
-  const capacityDegraded =
-    hadGeminiCapacityFailure() ||
-    (results.pipelineWarnings?.some((w) => w.code === "GEMINI_CAPACITY_DEGRADED") ?? false);
 
   const geminiUsage = {
     configured: isGoogleAiConfigured(),
@@ -405,20 +311,14 @@ export async function runMultiModelVerification(
     totalTokens: totalGeminiTokens > 0 ? totalGeminiTokens : undefined,
     runtimeEnvKeys: listDetectedAiEnvKeys(),
     liveApiAttempts: geminiAttempts,
-    lastApiError:
-      geminiLiveCalls === 0 && geminiAttempts > 0 ? getLastGeminiError() : undefined,
+    lastApiError: geminiLiveCalls === 0 && geminiAttempts > 0 ? getLastGeminiError() : undefined,
     liveEvidenceClaims,
-    capacityDegraded,
-    userMessage: capacityDegraded ? GEMINI_CAPACITY_USER_MESSAGE : undefined,
-    fallbackModelUsed: getLastGeminiFallbackModel(),
   };
 
   const geminiNote = isGoogleAiConfigured()
     ? geminiLiveCalls > 0
       ? ` Gemini: ${geminiLiveCalls} live call(s), ${totalSearchQueries} Google Search quer${totalSearchQueries === 1 ? "y" : "ies"}.`
-      : capacityDegraded
-        ? " Gemini was temporarily unavailable; analysis used fallback models."
-        : ` Gemini key set but no live corroboration responses (${geminiAttempts} attempt(s)).`
+      : ` Gemini key set but no live corroboration responses (${geminiAttempts} attempt(s)${getLastGeminiError() ? ` — ${getLastGeminiError()}` : ""}).`
     : " Gemini: not configured (set GOOGLE_AI_API_KEY or GEMINI_API_KEY).";
 
   return {
@@ -465,7 +365,6 @@ export function applyMultiModelToReport(
     claims,
     overallConfidence,
     multiModelVerification: multiModel,
-    pipelineWarnings: report.pipelineWarnings,
     summary: `${report.summary} ${multiModel.summary}`,
   };
 }

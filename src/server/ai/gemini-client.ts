@@ -3,11 +3,6 @@ import { geminiModelCandidates } from "./gemini-models";
 import { extractGoogleApiKey, sanitizeGoogleApiKeyOrUndefined } from "./sanitize-api-secret";
 import { parseRetryAfterSeconds, withGeminiRateLimit } from "./gemini-rate-limit";
 import { getServerEnv } from "../env/server-env";
-import {
-  isGeminiCapacityHttpError,
-  noteGeminiCapacityFailure,
-  noteGeminiFallbackUsed,
-} from "./gemini-resilience";
 
 export interface GeminiGroundingChunk {
   web?: { title?: string; uri?: string };
@@ -27,8 +22,6 @@ export interface GeminiGenerateResult {
 
 const DEFAULT_TIMEOUT = Number(getServerEnv("GEMINI_FETCH_TIMEOUT_MS")) || 28_000;
 const MAX_429_RETRIES = Number(getServerEnv("GEMINI_429_MAX_RETRIES")) || 4;
-const MAX_503_RETRIES = Number(getServerEnv("GEMINI_503_MAX_RETRIES")) || 3;
-const BASE_503_BACKOFF_MS = Number(getServerEnv("GEMINI_503_BACKOFF_MS")) || 2000;
 
 let lastGeminiError: string | undefined;
 let lastGeminiAttemptLog: string[] = [];
@@ -106,21 +99,13 @@ export async function geminiGenerateContent(options: {
     for (const model of models) {
       for (const apiVersion of apiVersions) {
         const result = await geminiGenerateContentOnce(apiKey, model, apiVersion, options, keyMeta?.source);
-        if (result) {
-          if (model !== models[0]) {
-            noteGeminiFallbackUsed(model);
-          }
-          return result;
-        }
+        if (result) return result;
         if (lastGeminiError?.includes("Google rejected the API key")) break;
       }
       if (lastGeminiError?.includes("Google rejected the API key")) break;
     }
 
-    if (lastGeminiAttemptLog.some((m) => m.includes("HTTP 503") || m.includes("high demand"))) {
-      lastGeminiError =
-        "Gemini is experiencing high demand. Retries and fallback models were attempted; analysis may continue with degraded web evidence.";
-    } else if (lastGeminiAttemptLog.some((m) => m.includes("HTTP 429"))) {
+    if (lastGeminiAttemptLog.some((m) => m.includes("HTTP 429"))) {
       lastGeminiError =
         `Gemini free-tier rate limit exceeded. ${lastGeminiAttemptLog.join("; ")} ` +
         "Enable billing at https://ai.google.dev or wait a minute and retry.";
@@ -175,7 +160,6 @@ async function geminiGenerateContentOnce(
 
   const bodyJson = JSON.stringify(body);
 
-  let retries503 = 0;
   for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
     try {
       const res = await geminiFetch(url, bodyJson, options.timeoutMs ?? DEFAULT_TIMEOUT);
@@ -191,42 +175,24 @@ async function geminiGenerateContentOnce(
         promptFeedback?: { blockReason?: string };
       };
 
-      const apiMsg = data.error?.message ?? "";
-
       if (res.status === 429 && attempt < MAX_429_RETRIES) {
-        const waitSec = parseRetryAfterSeconds(apiMsg) ?? 18;
-        console.warn(`[gemini-client] 429 on ${model}@${apiVersion}, retry in ${waitSec}s`);
+        const errMsg = data.error?.message ?? "";
+        const waitSec = parseRetryAfterSeconds(errMsg) ?? 18;
+        console.warn(`[gemini-client] 429 on ${model}, retry in ${waitSec}s`);
         await sleep(waitSec * 1000);
         continue;
       }
 
-      if (isGeminiCapacityHttpError(res.status, apiMsg) && retries503 < MAX_503_RETRIES) {
-        retries503 += 1;
-        const backoff = BASE_503_BACKOFF_MS * 2 ** (retries503 - 1);
-        const adminLine = `${model}@${apiVersion}: HTTP ${res.status} ${apiMsg}`.trim();
-        noteGeminiCapacityFailure(adminLine);
-        console.warn(
-          `[gemini-client] capacity error on ${model}@${apiVersion}, retry ${retries503}/${MAX_503_RETRIES} in ${backoff}ms`,
-        );
-        lastGeminiAttemptLog.push(adminLine);
-        await sleep(backoff);
-        continue;
-      }
-
       if (!res.ok) {
+        const apiMsg = data.error?.message ?? "";
         const invalidKey =
           res.status === 400 &&
           /api key not valid|API_KEY_INVALID|invalid api key/i.test(apiMsg);
         const msg = invalidKey
           ? `${model}@${apiVersion}: ${getGoogleAiKeyInvalidHint(keySource)}`
           : `${model}@${apiVersion}: HTTP ${res.status} ${apiMsg}`.trim();
-        if (isGeminiCapacityHttpError(res.status, apiMsg)) {
-          noteGeminiCapacityFailure(msg);
-        }
         lastGeminiAttemptLog.push(msg);
-        lastGeminiError = isGeminiCapacityHttpError(res.status, apiMsg)
-          ? "Gemini capacity limit reached for this model."
-          : msg;
+        lastGeminiError = msg;
         console.warn("[gemini-client]", msg);
         return null;
       }

@@ -105,15 +105,6 @@ export function ReportView({
         </button>
       </div>
 
-      {platformReport?.pipelineWarnings?.map((warning) => (
-        <div
-          key={warning.code}
-          className="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
-        >
-          {warning.message}
-        </div>
-      ))}
-
       {articlePageMode && (articleExplainability || articlePageScores) && (
         <div className="mt-8 space-y-8">
           <ArticleElevenScoresPanel
