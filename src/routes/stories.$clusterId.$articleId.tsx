@@ -85,7 +85,7 @@ function FeedArticleAnalysisRoute() {
       sync: true,
     }).then((res) => {
       if (!res.success) {
-        setAnalysisError(res.error);
+        setAnalysisError(res.details ? `${res.error} (${res.details})` : res.error);
         return;
       }
       if (res.status === "completed" && res.report) {

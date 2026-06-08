@@ -46,12 +46,15 @@ function pickClusterLead(members: NewsArticle[]): NewsArticle | undefined {
 export function enrichClusterFromMembers(cluster: StoryCluster, members: NewsArticle[]): StoryCluster {
   const lead = pickClusterLead(members);
   const { primarySourceName, sourceNames } = uniqueSourceLabels(members, lead);
+  const memberIds = members.map((m) => m.id);
   return {
     ...cluster,
     category: members.length ? dominantCategoryFromArticles(members) : cluster.category,
     primarySourceName: primarySourceName || cluster.primarySourceName,
     sourceNames: sourceNames.length ? sourceNames : cluster.sourceNames,
     storyCount: members.length || cluster.storyCount,
+    articleIds: memberIds.length ? memberIds : cluster.articleIds,
+    storyIds: memberIds.length ? memberIds : (cluster.storyIds ?? cluster.articleIds),
   };
 }
 

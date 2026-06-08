@@ -182,6 +182,7 @@ export async function handleAnalyzeText(request: Request): Promise<Response> {
     return jsonError(result.error.message, {
       status: result.error.statusCode ?? 400,
       code: result.error.code,
+      extra: result.error.quota ? { quota: result.error.quota } : undefined,
     });
   }
 
@@ -193,6 +194,7 @@ export async function handleAnalyzeText(request: Request): Promise<Response> {
     kvConfigured: result.kvConfigured,
     analysisSnapshot: result.analysisSnapshot,
     failedMessage: result.failedMessage,
+    envWarning: result.envWarning,
   });
 }
 
@@ -215,6 +217,7 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     return jsonError(result.error.message, {
       status: result.error.statusCode ?? 400,
       code: result.error.code,
+      extra: result.error.quota ? { quota: result.error.quota } : undefined,
     });
   }
 
@@ -226,12 +229,14 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     kvConfigured: result.kvConfigured,
     analysisSnapshot: result.analysisSnapshot,
     failedMessage: result.failedMessage,
+    envWarning: result.envWarning,
   });
 }
 
 export async function handleAnalyzeArticle(request: Request): Promise<Response> {
   console.log("[api/analyze/article] route hit");
   ensureWorkerEnvFromPlatform();
+  await ensureFeedHydratedFromKv();
   const raw = await request.json().catch(() => null);
   console.log("[api/analyze/article] body received:", raw ? "yes" : "no");
   const parsed = articleSchema.safeParse(raw);

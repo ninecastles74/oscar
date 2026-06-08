@@ -13,14 +13,15 @@ export function jsonOk<T extends Record<string, unknown>>(data: T, status = 200)
 
 export function jsonError(
   error: string,
-  options?: { status?: number; details?: string; code?: string },
+  options?: { status?: number; details?: string; code?: string; extra?: Record<string, unknown> },
 ): Response {
   const status = options?.status ?? 400;
-  const body: ApiErrorBody = {
+  const body: ApiErrorBody & Record<string, unknown> = {
     success: false,
     error,
     ...(options?.details ? { details: options.details } : {}),
     ...(options?.code ? { code: options.code } : {}),
+    ...(options?.extra ?? {}),
   };
   return Response.json(body, { status });
 }

@@ -6,17 +6,17 @@ import { getWorkerBindingsRecord, setWorkerBindings } from "../news/worker-env";
 export function ensureWorkerEnvFromPlatform(): Record<string, unknown> {
   const cf = cloudflareEnv as Record<string, unknown>;
   const prev = getWorkerBindingsRecord() ?? {};
-  const merged: Record<string, unknown> = {};
-  for (const [rawKey, value] of Object.entries(prev)) {
-    if (typeof value === "string" && value.trim()) {
-      merged[normalizeEnvKey(rawKey)] = value.trim();
-    }
-  }
+  // Preserve KV / Durable Object bindings from the Worker fetch handler.
+  const merged: Record<string, unknown> = { ...prev };
+
   for (const [rawKey, value] of Object.entries(cf)) {
     if (typeof value === "string" && value.trim()) {
       merged[normalizeEnvKey(rawKey)] = value.trim();
+    } else if (value != null && typeof value !== "string") {
+      merged[rawKey] = value;
     }
   }
+
   setWorkerBindings(merged);
   mirrorWorkerEnvToProcessEnv(merged);
   return merged;

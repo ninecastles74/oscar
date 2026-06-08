@@ -3,6 +3,7 @@ type ApiError = {
   error: string;
   details?: string;
   code?: string;
+  quota?: import("@/features/analysis/quota-banner").QuotaInfo;
 };
 
 type ApiSuccess<T> = { success: true } & T;

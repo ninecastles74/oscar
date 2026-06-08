@@ -256,20 +256,10 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
     console.log("[loadFeedArticleAnalysis] articleId parsed:", key, "clusterId:", data.clusterId);
     let bundle = await getArticleBundleHydrated(key);
     if (!bundle) {
-      console.log("[loadFeedArticleAnalysis] no cached bundle — starting analysis");
-      const runAnalysis = () =>
-        analyzeArticleHeavyweight(article)
-          .then(() => persistFeedToKv())
-          .catch((err) => {
-            console.error(
-              "[loadFeedArticleAnalysis] analysis failed:",
-              err instanceof Error ? err.message : err,
-            );
-          });
+      console.log("[loadFeedArticleAnalysis] no cached bundle — analysis required");
 
       if (isFeedKvConfigured()) {
-        kickFeedConsensusBackground(cluster, articles);
-        runInWorkerBackground(runAnalysis());
+        // Client POST /api/analyze/article (sync) runs the pipeline; avoid duplicate jobs here.
         return {
           pendingAnalysis: true as const,
           clusterId: data.clusterId,
@@ -280,8 +270,10 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       }
 
       try {
+        console.log("[loadFeedArticleAnalysis] sync analysis started for", key);
         bundle = await analyzeArticleHeavyweight(article);
         await persistFeedToKv();
+        console.log("[loadFeedArticleAnalysis] sync analysis completed for", key);
       } catch (err) {
         return {
           error: {

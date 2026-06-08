@@ -69,13 +69,15 @@ export function Top100View({
         )}
         {!usingLiveFeed && (
           <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
-            <p className="font-medium">Showing sample stories — live feed is empty</p>
+            <p className="font-medium">Live feed is empty</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {bootstrap?.ran
                 ? `Bootstrap ingest ran (${bootstrap.reason}). Refresh in a moment.`
-                : bootstrap?.reason
-                  ? `Bootstrap: ${bootstrap.reason}.`
-                  : "Configure Cloudflare vars and KV, then open this page again or wait for the 8h cron."}
+                : bootstrap?.reason === "bootstrap_scheduled"
+                  ? "First ingest is running in the background. Refresh in a minute."
+                  : bootstrap?.reason
+                    ? `Bootstrap: ${bootstrap.reason}.`
+                    : "Configure Cloudflare vars and FEED_KV, then open this page again or wait for the 8h cron."}
             </p>
             {diagnostics?.missingConfiguration && diagnostics.missingConfiguration.length > 0 ? (
               <ul className="mt-2 list-inside list-disc text-xs text-muted-foreground">
@@ -131,6 +133,11 @@ export function Top100View({
           <div>Flags</div>
         </div>
         <div className="divide-y">
+          {list.length === 0 && (
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+              No stories match your filters yet. If the feed was just bootstrapped, refresh in a minute.
+            </div>
+          )}
           {list.map((c, i) => {
             const singleArticleId =
               c.storyCount === 1 && c.storyIds?.[0] ? c.storyIds[0] : undefined;

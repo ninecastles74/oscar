@@ -80,7 +80,8 @@ export function UserAnalysisForm({
       }>(endpoint, payload);
 
       if (!result.success) {
-        setError(result.error);
+        if (result.quota) setQuota(result.quota);
+        setError(result.details ? `${result.error} (${result.details})` : result.error);
         return;
       }
 
