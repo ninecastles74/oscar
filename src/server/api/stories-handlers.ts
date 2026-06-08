@@ -12,6 +12,11 @@ import {
   findClaimInFeed,
 } from "../news/feed-store";
 import { stableArticleId } from "../news/utils/text";
+import { getStoryConsensus } from "../consensus/store";
+import { buildStoryScoreExplainability } from "../transparency-explainability/build-story-explainability";
+import { getReliabilityBundleByArticleId } from "../reliability/engine";
+import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
+import { getVerificationSnapshot } from "../reliability/snapshots";
 import { jsonError, jsonOk } from "./response";
 
 export async function handleStoriesTop100(): Promise<Response> {
