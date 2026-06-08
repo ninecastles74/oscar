@@ -486,6 +486,14 @@ export interface MultiModelGeminiUsageSummary {
   totalTokens?: number;
   configured: boolean;
   googleSearchEnabled: boolean;
+  liveApiAttempts?: number;
+  liveEvidenceClaims?: number;
+  runtimeEnvKeys?: string[];
+  /** Admin/debug only — never show in user UI. */
+  lastApiError?: string;
+  capacityDegraded?: boolean;
+  userMessage?: string;
+  fallbackModelUsed?: string;
 }
 
 export interface MultiModelVerificationReport {
@@ -1161,6 +1169,17 @@ export interface AnalysisReport {
 
   /** Article-level claim consensus batch. */
   claimConsensus?: ClaimConsensusBatchReport;
+
+  /** Non-fatal pipeline notices (user-safe messages; details are admin/debug only). */
+  pipelineWarnings?: PipelineWarning[];
+}
+
+/** User-visible pipeline notice (never expose raw provider errors in `message`). */
+export interface PipelineWarning {
+  code: string;
+  message: string;
+  /** Admin/debug detail — omit from user UI. */
+  details?: string;
 }
 
 /** Aggregated issue counts. */

@@ -1,10 +1,23 @@
 import type { AnalysisReport } from "@/types/news-platform";
 import { hasHeuristicModelVerdicts } from "@/lib/live-analysis";
 import { getLastGeminiAttemptLog, getLastGeminiError } from "../ai/gemini-client";
+import {
+  GEMINI_CAPACITY_USER_MESSAGE,
+  hadGeminiCapacityFailure,
+} from "../ai/gemini-resilience";
 import { isGoogleAiConfigured } from "../ai/google-api-key";
 import { AnalysisError } from "./errors";
 
 export { hasHeuristicModelVerdicts, isLiveAnalysisReport } from "@/lib/live-analysis";
+
+function hasSuccessfulLiveModelVerdicts(report: AnalysisReport): boolean {
+  const claims = report.multiModelVerification?.claims ?? [];
+  return claims.some((c) =>
+    c.consensus.modelVerdicts.some(
+      (m) => !m.skipped && m.model !== "unavailable" && !m.model?.includes("heuristic"),
+    ),
+  );
+}
 
 /** Fail if the report used mock/heuristic pipeline or has no successful live AI calls. */
 export function assertLiveAnalysisReport(
@@ -43,19 +56,42 @@ export function assertLiveAnalysisReport(
     );
   }
 
+  const capacityDegraded =
+    hadGeminiCapacityFailure() ||
+    (report.pipelineWarnings?.some((w) => w.code === "GEMINI_CAPACITY_DEGRADED") ?? false);
+
   const gu = report.multiModelVerification.geminiUsage;
   const liveCalls = gu?.liveApiCalls ?? 0;
   const liveEvidence = gu?.liveEvidenceClaims ?? 0;
-  if (liveCalls === 0 && liveEvidence === 0) {
-    const attempts = getLastGeminiAttemptLog();
-    const err = gu?.lastApiError ?? getLastGeminiError();
-    const detail = attempts.length ? attempts.join("; ") : err;
+  const hasOtherLiveModels = hasSuccessfulLiveModelVerdicts(report);
+
+  if (liveCalls === 0 && liveEvidence === 0 && !hasOtherLiveModels && !capacityDegraded) {
+    console.error(
+      "[live-ai-guard] no live AI signals",
+      getLastGeminiAttemptLog().join("; ") || getLastGeminiError(),
+    );
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
-      detail
-        ? `No successful live Gemini calls. ${detail}`
-        : "No successful live Gemini calls. Set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash (or gemini-3.5-flash) and check API quota.",
+      "Analysis could not complete with live AI. Check API keys and quota, then retry in a few minutes.",
       503,
     );
   }
+
+  if (capacityDegraded && liveCalls === 0 && liveEvidence === 0) {
+    console.warn(
+      "[live-ai-guard] continuing with degraded Gemini capacity — OpenAI/Claude path used",
+    );
+  }
+}
+
+/** User-safe warning text for UI (never raw HTTP errors). */
+export function getAnalysisCapacityUserMessage(report: AnalysisReport): string | undefined {
+  const fromReport = report.pipelineWarnings?.find((w) => w.code === "GEMINI_CAPACITY_DEGRADED")
+    ?.message;
+  if (fromReport) return fromReport;
+  if (report.multiModelVerification?.geminiUsage?.userMessage) {
+    return report.multiModelVerification.geminiUsage.userMessage;
+  }
+  if (hadGeminiCapacityFailure()) return GEMINI_CAPACITY_USER_MESSAGE;
+  return undefined;
 }

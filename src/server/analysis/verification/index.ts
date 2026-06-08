@@ -10,7 +10,16 @@ import { attachResearchToScoredClaims } from "../../research/research-claims";
 import { scoreConfidence } from "./scoreConfidence";
 import type { ScoredClaim, VerificationPipelineResults, VerificationReportBundle } from "./types";
 import { isGoogleAiConfigured } from "../../ai/google-api-key";
-import { getLastGeminiAttemptLog, getLastGeminiError } from "../../ai/gemini-client";
+import {
+  getLastGeminiAttemptLog,
+  getLastGeminiError,
+} from "../../ai/gemini-client";
+import {
+  buildGeminiCapacityWarning,
+  getGeminiCapacityAdminLog,
+  hadGeminiCapacityFailure,
+  resetGeminiResilienceState,
+} from "../../ai/gemini-resilience";
 import { AnalysisError } from "../errors";
 
 export { VERDICT_LABELS } from "./types";
@@ -22,6 +31,8 @@ export type { VerificationPipelineResults, VerificationReportBundle } from "./ty
 export async function runVerificationPipeline(
   article: PipelineArticleContext,
 ): Promise<VerificationReportBundle> {
+  resetGeminiResilienceState();
+
   if (!isGoogleAiConfigured()) {
     throw new AnalysisError(
       "LIVE_AI_REQUIRED",
@@ -32,6 +43,7 @@ export async function runVerificationPipeline(
 
   const startedAt = Date.now();
   const stages: string[] = [];
+  const pipelineWarnings: import("./types").VerificationPipelineResults["pipelineWarnings"] = [];
 
   stages.push("extractClaims");
   const raw = await extractClaimsWithLlm(article.analysisText, article.submissionId);
@@ -64,19 +76,35 @@ export async function runVerificationPipeline(
   stages.push("retrieveEvidence");
   const evidenceByClaimId = await retrieveEvidenceLive(classifiedWithTopics);
   const missingLive = classifiedWithTopics.filter((c) => !evidenceByClaimId[c.id]?.length);
+
   if (missingLive.length > 0) {
-    const hint = getLastGeminiError();
-    const attempts = getLastGeminiAttemptLog();
-    const detail = attempts.length ? attempts.join("; ") : hint;
-    throw new AnalysisError(
-      "LIVE_AI_REQUIRED",
-      `Live web evidence failed for ${missingLive.length} of ${classifiedWithTopics.length} claim(s). Missing: ${missingLive.map((c) => c.id).join(", ")}.${
-        detail ? ` ${detail}` : " Check Gemini quota or set GEMINI_VERIFICATION_MODEL=gemini-2.5-flash"
-      }`,
-      503,
+    const adminDetails = [
+      ...getGeminiCapacityAdminLog(),
+      ...getLastGeminiAttemptLog(),
+      getLastGeminiError(),
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+    pipelineWarnings.push(
+      buildGeminiCapacityWarning(
+        adminDetails || `Missing live evidence for ${missingLive.length} claim(s).`,
+      ),
     );
+
+    console.warn(
+      "[verification] live web evidence degraded:",
+      missingLive.map((c) => c.id).join(", "),
+      adminDetails ? `| ${adminDetails}` : "",
+    );
+    stages.push("retrieveEvidenceLiveDegraded");
+  } else {
+    stages.push("retrieveEvidenceLive");
   }
-  stages.push("retrieveEvidenceLive");
+
+  if (hadGeminiCapacityFailure() && pipelineWarnings.length === 0) {
+    pipelineWarnings.push(buildGeminiCapacityWarning(getGeminiCapacityAdminLog().join("; ")));
+  }
 
   stages.push("compareSources");
   const comparisons = compareSources(classifiedWithTopics, evidenceByClaimId);
@@ -125,6 +153,7 @@ export async function runVerificationPipeline(
       totalClaims: scoredClaims.length,
     },
     startedAt,
+    pipelineWarnings: pipelineWarnings.length > 0 ? pipelineWarnings : undefined,
   };
 
   stages.push("generateFinalReport");
