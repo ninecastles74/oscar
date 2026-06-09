@@ -4,7 +4,7 @@ import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/ne
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { runStoryConsensusForCluster } from "./analyze-cluster";
 import {
-  analyzeArticleHeavyweight,
+  bundleNeedsAiReanalysis,
   runHeavyweightClusterAnalysis,
 } from "./analyze-cluster-heavyweight";
 import { MIN_ARTICLES_FOR_CLUSTER_ANALYSIS } from "./constants";
@@ -254,35 +254,18 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
 
     const key = article.id || stableArticleId(article.url);
     console.log("[loadFeedArticleAnalysis] articleId parsed:", key, "clusterId:", data.clusterId);
-    let bundle = await getArticleBundleHydrated(key);
-    if (!bundle) {
-      console.log("[loadFeedArticleAnalysis] no cached bundle — analysis required");
+    const bundle = await getArticleBundleHydrated(key);
+    const needsAnalysis = !bundle || bundleNeedsAiReanalysis(bundle);
 
-      if (isFeedKvConfigured()) {
-        // Client POST /api/analyze/article (sync) runs the pipeline; avoid duplicate jobs here.
-        return {
-          pendingAnalysis: true as const,
-          clusterId: data.clusterId,
-          articleId: key,
-          title: article.title,
-          message: "Running live Oscar analysis for this article…",
-        };
-      }
-
-      try {
-        console.log("[loadFeedArticleAnalysis] sync analysis started for", key);
-        bundle = await analyzeArticleHeavyweight(article);
-        await persistFeedToKv();
-        console.log("[loadFeedArticleAnalysis] sync analysis completed for", key);
-      } catch (err) {
-        return {
-          error: {
-            code: "ANALYSIS_FAILED",
-            message: err instanceof Error ? err.message : "Article analysis failed",
-          },
-          clusterId: data.clusterId,
-        };
-      }
+    if (needsAnalysis) {
+      console.log("[loadFeedArticleAnalysis] analysis required for", key);
+      return {
+        pendingAnalysis: true as const,
+        clusterId: data.clusterId,
+        articleId: key,
+        title: article.title,
+        message: "Running live Oscar analysis for this article…",
+      };
     }
 
     let storyReport = getStoryConsensus(data.clusterId);

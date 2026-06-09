@@ -46,7 +46,7 @@ function articleToPipeline(article: NewsArticle): PipelineArticleContext {
 }
 
 /** Full pipeline + multi-model + reliability for one article (scheduled, no user quota). */
-function bundleNeedsAiReanalysis(bundle: AnalyzedArticleBundle): boolean {
+export function bundleNeedsAiReanalysis(bundle: AnalyzedArticleBundle): boolean {
   if (!bundle.report.multiModelVerification) return true;
   const live = bundle.report.multiModelVerification.geminiUsage?.liveApiCalls ?? 0;
   return live === 0;

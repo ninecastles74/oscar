@@ -2,7 +2,7 @@ import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { runGatedUserAnalysis } from "../analysis/api-run";
 import { getManualAnalysisResult, getManualAnalysisStatus } from "../analysis/manual";
-import { analyzeArticleHeavyweight } from "../consensus/analyze-cluster-heavyweight";
+import { analyzeArticleHeavyweight, bundleNeedsAiReanalysis } from "../consensus/analyze-cluster-heavyweight";
 import { buildArticlePageScores } from "../consensus/article-page-scores";
 import { getStoryConsensus } from "../consensus/store";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
@@ -261,10 +261,13 @@ export async function handleAnalyzeArticle(request: Request): Promise<Response> 
   }
 
   const { article, key } = resolved;
-  const existing = await buildArticleAnalysisResponse(resolved.clusterId, article, key);
-  if (existing) {
-    console.log("[api/analyze/article] returning cached analysis for", key);
-    return jsonOk({ status: "completed" as const, ...existing });
+  const cachedBundle = await getArticleBundleHydrated(key);
+  if (cachedBundle && !bundleNeedsAiReanalysis(cachedBundle)) {
+    const existing = await buildArticleAnalysisResponse(resolved.clusterId, article, key);
+    if (existing) {
+      console.log("[api/analyze/article] returning cached analysis for", key);
+      return jsonOk({ status: "completed" as const, ...existing });
+    }
   }
 
   const runAnalysis = async () => {

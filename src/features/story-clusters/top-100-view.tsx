@@ -139,12 +139,11 @@ export function Top100View({
             </div>
           )}
           {list.map((c, i) => {
-            const singleArticleId =
-              c.storyCount === 1 && c.storyIds?.[0] ? c.storyIds[0] : undefined;
-            const href = singleArticleId
+            const primaryArticleId = c.storyIds?.[0];
+            const href = primaryArticleId
               ? ({
                   to: "/stories/$clusterId/$articleId" as const,
-                  params: { clusterId: c.id, articleId: singleArticleId },
+                  params: { clusterId: c.id, articleId: primaryArticleId },
                 } as const)
               : ({
                   to: "/consensus/$clusterId" as const,
@@ -163,10 +162,10 @@ export function Top100View({
                 <div className="text-sm font-semibold leading-snug">{c.title}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {c.storyCount > 1
-                    ? `${c.storyCount} sources`
+                    ? `${c.storyCount} sources · click for Oscar analysis`
                     : c.primarySourceName
-                      ? "1 source"
-                      : "1 source"}{" "}
+                      ? "1 source · click for Oscar analysis"
+                      : "1 source · click for Oscar analysis"}{" "}
                   · updated{" "}
                   {new Date(c.publishedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </div>

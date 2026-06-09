@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ReportView } from "@/features/reports/report-view";
 import { loadFeedArticleAnalysis } from "@/server/consensus/functions";
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
       return {
         pendingAnalysis: true as const,
         clusterId: params.clusterId,
-        articleId: params.articleId,
+        articleId: result.articleId ?? params.articleId,
         title: result.title ?? "Article",
         message: result.message,
       };
@@ -59,53 +59,77 @@ type CompletedAnalysis = {
   storyScores?: unknown;
 };
 
+type AnalyzeArticleResponse = {
+  status: "completed" | "processing";
+  report?: ReturnType<typeof analysisReportToManualReport>;
+  platformReport?: AnalysisReport;
+  explainability?: unknown;
+  articlePageScores?: unknown;
+  storyReport?: unknown;
+};
+
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
   const router = useRouter();
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
+  const [analysisRunning, setAnalysisRunning] = useState(false);
   const triggered = useRef(false);
 
   const isPending = "pendingAnalysis" in data && data.pendingAnalysis;
+  const clusterId = data.clusterId;
+  const articleId = "articleId" in data ? data.articleId : "";
 
-  useEffect(() => {
-    if (!isPending || triggered.current) return;
-    triggered.current = true;
+  const runAnalysis = useCallback(async () => {
+    if (!articleId) return;
+    setAnalysisRunning(true);
+    setAnalysisError(null);
 
-    void postJson<{
-      status: "completed" | "processing";
-      report?: ReturnType<typeof analysisReportToManualReport>;
-      platformReport?: AnalysisReport;
-      explainability?: unknown;
-      articlePageScores?: unknown;
-      storyReport?: unknown;
-    }>("/api/analyze/article", {
-      articleId: "articleId" in data ? data.articleId : "",
-      clusterId: data.clusterId,
-      sync: true,
-    }).then((res) => {
+    try {
+      const res = await postJson<AnalyzeArticleResponse>("/api/analyze/article", {
+        articleId,
+        clusterId,
+        sync: true,
+      });
+
       if (!res.success) {
         setAnalysisError(res.details ? `${res.error} (${res.details})` : res.error);
         return;
       }
+
       if (res.status === "completed" && res.report) {
         setCompleted({
-          clusterId: data.clusterId,
+          clusterId,
           report: res.report,
           platformReport: res.platformReport,
           explainability: res.explainability,
           articlePageScores: res.articlePageScores,
           storyReport: res.storyReport,
         });
+        return;
       }
-    });
-  }, [isPending, data]);
+
+      if (res.status === "processing") {
+        void router.invalidate();
+      }
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setAnalysisRunning(false);
+    }
+  }, [articleId, clusterId, router]);
 
   useEffect(() => {
-    if (!isPending || completed || analysisError) return;
+    if (!isPending || triggered.current) return;
+    triggered.current = true;
+    void runAnalysis();
+  }, [isPending, runAnalysis]);
+
+  useEffect(() => {
+    if (!isPending || completed || analysisError || analysisRunning) return;
     const timer = setInterval(() => void router.invalidate(), 2500);
     return () => clearInterval(timer);
-  }, [isPending, completed, analysisError, router]);
+  }, [isPending, completed, analysisError, analysisRunning, router]);
 
   if (completed) {
     return (
@@ -146,12 +170,26 @@ function FeedArticleAnalysisRoute() {
         </p>
         {!analysisError && (
           <p className="mt-4 text-xs text-muted-foreground">
-            This may take 1–3 minutes for full multi-model verification.
+            {analysisRunning
+              ? "Analysis in progress — this may take 1–3 minutes."
+              : "Starting Oscar analysis…"}
           </p>
+        )}
+        {analysisError && (
+          <button
+            type="button"
+            onClick={() => {
+              triggered.current = false;
+              void runAnalysis();
+            }}
+            className="mt-4 rounded-md bg-foreground px-4 py-2 text-sm font-semibold text-background"
+          >
+            Retry analysis
+          </button>
         )}
         <Link
           to="/consensus/$clusterId"
-          params={{ clusterId: data.clusterId }}
+          params={{ clusterId }}
           className="mt-6 text-sm text-accent hover:underline"
         >
           Back to cluster analysis
