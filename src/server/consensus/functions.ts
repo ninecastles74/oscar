@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { NewsArticle, StoryCluster, StoryConsensusReport } from "@/types/news-platform";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
+import { buildFinalAnalysisReport } from "@/lib/final-analysis-report";
 import { runStoryConsensusForCluster } from "./analyze-cluster";
 import {
   bundleNeedsAiReanalysis,
@@ -323,6 +324,13 @@ export const loadFeedArticleAnalysis = createServerFn({ method: "GET" })
       platformReport: bundle.report,
       articlePageScores,
       explainability,
+      finalAnalysis: buildFinalAnalysisReport({
+        report: bundle.report,
+        reliability,
+        explainability,
+        stagesCompleted: ["verification", "multi_model", "reliability", "claim_consensus"],
+        stagesFailedOrLimited: bundle.report.pipelineWarnings?.map((w) => w.code) ?? [],
+      }),
       storyReport: storyReport ?? null,
       storyScores: articlePageScores.story,
     };

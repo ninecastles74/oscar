@@ -4,7 +4,34 @@ import { getServerEnv, listApiKeyEnvNames } from "../env/server-env";
 import { feedKvStatus } from "../news/feed-persist";
 import { getFeedMeta } from "../news/feed-store";
 import { isSupabaseConfigured } from "../supabase/config";
-import { checkSupabaseConnection as pingSupabase } from "../supabase/client";
+import { checkSupabaseConnection as pingSupabase, getSupabaseAdmin } from "../supabase/client";
+
+const SUPABASE_TABLE_CHECKS = [
+  "sources",
+  "articles",
+  "analysis_runs",
+  "claims",
+  "claim_evidence",
+  "article_scores",
+] as const;
+
+async function checkSupabaseTables(): Promise<Record<string, { ok: boolean; message?: string }>> {
+  const client = getSupabaseAdmin();
+  const results: Record<string, { ok: boolean; message?: string }> = {};
+  if (!client) {
+    for (const table of SUPABASE_TABLE_CHECKS) {
+      results[table] = { ok: false, message: "Supabase not configured" };
+    }
+    return results;
+  }
+  for (const table of SUPABASE_TABLE_CHECKS) {
+    const { error } = await client.from(table).select("id").limit(1);
+    results[table] = error
+      ? { ok: false, message: error.message }
+      : { ok: true };
+  }
+  return results;
+}
 
 const REQUIRED_ENV_FLAGS = [
   "SUPABASE_URL",
@@ -30,6 +57,7 @@ export async function buildHealthPayload() {
   const kv = feedKvStatus();
   const feedMeta = getFeedMeta();
   let supabase: { configured: boolean; ok: boolean; message: string };
+  let supabaseTables: Record<string, { ok: boolean; message?: string }> | undefined;
 
   if (!isSupabaseConfigured()) {
     supabase = {
@@ -39,7 +67,17 @@ export async function buildHealthPayload() {
     };
   } else {
     const ping = await pingSupabase();
-    supabase = { configured: true, ok: ping.ok, message: ping.message };
+    supabaseTables = await checkSupabaseTables();
+    const tablesOk = Object.values(supabaseTables).every((t) => t.ok);
+    supabase = {
+      configured: true,
+      ok: ping.ok && tablesOk,
+      message: ping.ok
+        ? tablesOk
+          ? "Connected; core tables reachable."
+          : "Connected but some tables are missing — run npm run db:push."
+        : ping.message,
+    };
     console.log("[api/health] Supabase ping:", ping.ok ? "ok" : ping.message);
   }
 
@@ -57,6 +95,7 @@ export async function buildHealthPayload() {
     feedKv: kv,
     feedMeta,
     supabase,
+    supabaseTables,
     envPresent,
     newsIngestReady,
     recommendations: [

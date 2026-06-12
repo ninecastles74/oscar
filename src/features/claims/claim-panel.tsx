@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronDown, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { sourceById, type Claim } from "@/lib/mock-data";
+import { sourceById, sourceForStory, type Claim } from "@/lib/mock-data";
 import type {
   ClaimConsensusReport,
   ClaimResearchReport,
@@ -91,7 +91,16 @@ export function ClaimPanel({
           {claim.claimResearch && <ClaimResearchPanel research={claim.claimResearch} />}
           <div className="grid gap-2">
             {claim.evidence.map((e) => {
-              const s = sourceById(e.sourceId);
+              const s =
+                sourceById(e.sourceId) ??
+                sourceForStory(e.sourceId) ?? {
+                  id: e.sourceId,
+                  name: e.sourceId,
+                  domain: e.url ? new URL(e.url).hostname.replace(/^www\./, "") : "unknown",
+                  bias: "unknown" as const,
+                  reliability: 50,
+                  approved: false,
+                };
               return (
                 <div key={e.id} className="rounded-md border bg-card p-3">
                   <div className="mb-2 flex items-center justify-between">

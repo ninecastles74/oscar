@@ -34,8 +34,9 @@ import {
   syncManualSubmission,
 } from "./manual-persist";
 
-const MANUAL_ANALYSIS_WALL_MS =
-  Number(getServerEnv("MANUAL_ANALYSIS_WALL_MS")) || 10 * 60 * 1000;
+import { ANALYSIS_TIMEOUTS } from "./timeouts";
+
+const MANUAL_ANALYSIS_WALL_MS = ANALYSIS_TIMEOUTS.backendWallMs;
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;

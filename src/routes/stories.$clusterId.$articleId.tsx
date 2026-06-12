@@ -6,6 +6,7 @@ import { loadFeedArticleAnalysis } from "@/server/consensus/functions";
 import { postJson } from "@/lib/api-client";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { OSCAR, pageTitle } from "@/lib/brand";
+import { userFacingAnalysisError } from "@/lib/user-facing-errors";
 import type { AnalysisReport } from "@/types/news-platform";
 
 export const Route = createFileRoute("/stories/$clusterId/$articleId")({
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/stories/$clusterId/$articleId")({
       report: result.report,
       platformReport: result.platformReport,
       explainability: "explainability" in result ? result.explainability : undefined,
+      finalAnalysis: "finalAnalysis" in result ? result.finalAnalysis : undefined,
       articlePageScores:
         "articlePageScores" in result ? result.articlePageScores : undefined,
       storyReport: "storyReport" in result ? result.storyReport : null,
@@ -54,6 +56,7 @@ type CompletedAnalysis = {
   report: ReturnType<typeof analysisReportToManualReport>;
   platformReport?: AnalysisReport;
   explainability?: unknown;
+  finalAnalysis?: import("@/lib/final-analysis-report").FinalAnalysisReport;
   articlePageScores?: unknown;
   storyReport?: unknown;
   storyScores?: unknown;
@@ -64,6 +67,7 @@ type AnalyzeArticleResponse = {
   report?: ReturnType<typeof analysisReportToManualReport>;
   platformReport?: AnalysisReport;
   explainability?: unknown;
+  finalAnalysis?: import("@/lib/final-analysis-report").FinalAnalysisReport;
   articlePageScores?: unknown;
   storyReport?: unknown;
 };
@@ -102,7 +106,7 @@ function FeedArticleAnalysisRoute() {
       });
 
       if (!res.success) {
-        setAnalysisError(res.details ? `${res.error} (${res.details})` : res.error);
+        setAnalysisError(userFacingAnalysisError(res.error, res.details, res.code));
         return;
       }
 
@@ -119,6 +123,7 @@ function FeedArticleAnalysisRoute() {
           report,
           platformReport,
           explainability: res.explainability,
+          finalAnalysis: res.finalAnalysis,
           articlePageScores: res.articlePageScores,
           storyReport: res.storyReport,
         });
@@ -164,6 +169,7 @@ function FeedArticleAnalysisRoute() {
           report={completed.report}
           platformReport={completed.platformReport}
           explainability={completed.explainability}
+          finalAnalysis={completed.finalAnalysis}
           articlePageScores={completed.articlePageScores}
           hideTopBackLink
           articlePageMode
@@ -254,6 +260,7 @@ function FeedArticleAnalysisRoute() {
         report={data.report}
         platformReport={data.platformReport}
         explainability={data.explainability}
+        finalAnalysis={"finalAnalysis" in data ? data.finalAnalysis : undefined}
         articlePageScores={"articlePageScores" in data ? data.articlePageScores : undefined}
         hideTopBackLink
         articlePageMode

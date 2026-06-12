@@ -6,6 +6,8 @@ import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { getJson } from "@/lib/api-client";
 import { ReportView } from "@/features/reports/report-view";
 import { OSCAR, pageTitle } from "@/lib/brand";
+import type { FinalAnalysisReport } from "@/lib/final-analysis-report";
+import { userFacingAnalysisError } from "@/lib/user-facing-errors";
 import type { AnalysisReport, FinalIntelligenceSummary } from "@/types/news-platform";
 import type { ManualReport } from "@/lib/mock-data";
 
@@ -22,6 +24,7 @@ type ClientSnapshot = {
   report: AnalysisReport;
   reliability?: unknown;
   finalIntelligence?: FinalIntelligenceSummary;
+  finalAnalysis?: FinalAnalysisReport;
 };
 
 type PollPayload = {
@@ -31,6 +34,7 @@ type PollPayload = {
   platformReport?: AnalysisReport;
   explainability?: unknown;
   finalIntelligence?: FinalIntelligenceSummary;
+  finalAnalysis?: FinalAnalysisReport;
   errorMessage?: string;
   progress?: number;
   startedAt?: string;
@@ -38,7 +42,14 @@ type PollPayload = {
 
 type ResultsState =
   | { phase: "loading"; message: string }
-  | { phase: "completed"; report: ManualReport; platformReport?: AnalysisReport; explainability?: unknown; finalIntelligence?: FinalIntelligenceSummary }
+  | {
+      phase: "completed";
+      report: ManualReport;
+      platformReport?: AnalysisReport;
+      explainability?: unknown;
+      finalIntelligence?: FinalIntelligenceSummary;
+      finalAnalysis?: FinalAnalysisReport;
+    }
   | { phase: "failed"; message: string; detail?: string };
 
 function readSessionSnapshot(requestId: string): ClientSnapshot | null {
@@ -71,6 +82,7 @@ function AnalyzeResultsPage() {
         report: analysisReportToManualReport(snap.report),
         platformReport: snap.report,
         finalIntelligence: snap.finalIntelligence,
+        finalAnalysis: snap.finalAnalysis,
       };
     }
     return { phase: "loading", message: "Running analysis" };
@@ -102,6 +114,7 @@ function AnalyzeResultsPage() {
           report: analysisReportToManualReport(snap.report),
           platformReport: snap.report,
           finalIntelligence: snap.finalIntelligence,
+          finalAnalysis: snap.finalAnalysis,
         });
         return;
       }
@@ -131,8 +144,7 @@ function AnalyzeResultsPage() {
         if (pollFailuresRef.current >= MAX_POLL_FAILURES || elapsed >= STALE_MS) {
           finish({
             phase: "failed",
-            message: "Could not load analysis results.",
-            detail: res.details ? `${res.error} (${res.details})` : res.error,
+            message: userFacingAnalysisError(res.error, res.details, res.code),
           });
         }
         return;
@@ -152,6 +164,7 @@ function AnalyzeResultsPage() {
           platformReport,
           explainability: res.explainability,
           finalIntelligence: res.finalIntelligence,
+          finalAnalysis: res.finalAnalysis,
         });
         return;
       }
@@ -196,6 +209,7 @@ function AnalyzeResultsPage() {
         platformReport={state.platformReport}
         explainability={state.explainability}
         finalIntelligence={state.finalIntelligence}
+        finalAnalysis={state.finalAnalysis}
       />
     );
   }

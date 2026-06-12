@@ -5,7 +5,10 @@ import type {
   AnalysisExplainabilityBundle,
   AnalysisReport,
   FinalIntelligenceSummary,
+  TransparencyExplainabilityBundle,
 } from "@/types/news-platform";
+import { FinalAnalysisSummary } from "@/features/reports/final-analysis-summary";
+import type { FinalAnalysisReport } from "@/lib/final-analysis-report";
 import { FinalIntelligencePanel } from "@/features/explainability/final-intelligence-panel";
 import { ConfidenceBar } from "@/components/confidence-bar";
 import { StatTile } from "@/components/stat-tile";
@@ -37,6 +40,8 @@ export function ReportView({
   articlePageMode = false,
   storyScores = null,
   storyReport = null,
+  articlePageScores = null,
+  finalAnalysis,
 }: {
   report: ManualReport;
   platformReport?: AnalysisReport;
@@ -47,9 +52,25 @@ export function ReportView({
   articlePageMode?: boolean;
   storyScores?: ArticleStoryScores | null;
   storyReport?: StoryConsensusReport | null;
+  articlePageScores?: ArticlePageScores | null | unknown;
+  finalAnalysis?: FinalAnalysisReport;
 }) {
   const [claimExplainOpen, setClaimExplainOpen] = useState(false);
   const [claimExplain, setClaimExplain] = useState<ScoreExplainability | null>(null);
+
+  const normalizedArticlePageScores =
+    articlePageScores && typeof articlePageScores === "object"
+      ? (articlePageScores as ArticlePageScores)
+      : null;
+  const articleExplainability =
+    normalizedArticlePageScores != null
+      ? articlePageScoresToExplainability(normalizedArticlePageScores, report.title)
+      : explainability && "article" in explainability
+        ? explainability.article
+        : null;
+  const effectiveStoryScores =
+    storyScores ?? normalizedArticlePageScores?.story ?? null;
+  const showLegacyReport = !finalAnalysis;
 
   const counts = report.claims.reduce<Record<string, number>>(
     (a, c) => ((a[c.verdict] = (a[c.verdict] || 0) + 1), a),
@@ -62,7 +83,7 @@ export function ReportView({
       ...articleExplainability,
       entityLabel: "Claim verification confidence",
       whyScoreExists:
-        `Overall verification confidence (${report.overallConfidence}%) is the mean confidence across extracted claims — distinct from article reliability (${explainability.article.overallScore}/100).`,
+        `Overall verification confidence (${report.overallConfidence}%) is the mean confidence across extracted claims — distinct from article reliability (${explainability && "article" in explainability ? explainability.article.overallScore : "—"}/100).`,
       howCalculated:
         "Each claim receives a confidence score from evidence strength, source agreement, and verdict classification.",
       overallScore: report.overallConfidence,
@@ -105,20 +126,33 @@ export function ReportView({
         </button>
       </div>
 
-      {platformReport?.pipelineWarnings?.map((warning) => (
-        <div
-          key={warning.code}
-          className="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
-        >
-          {warning.message}
-        </div>
-      ))}
+      {finalAnalysis?.summary.importantWarning ? (
+        <p className="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
+          {finalAnalysis.summary.importantWarning}
+        </p>
+      ) : null}
 
-      {articlePageMode && (articleExplainability || articlePageScores) && (
+      {showLegacyReport &&
+        platformReport?.pipelineWarnings?.map((warning) => (
+          <div
+            key={warning.code}
+            className="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
+          >
+            {warning.message}
+          </div>
+        ))}
+
+      {finalAnalysis ? (
+        <div className="mt-8">
+          <FinalAnalysisSummary analysis={finalAnalysis} />
+        </div>
+      ) : null}
+
+      {!finalAnalysis && articlePageMode && (articleExplainability || normalizedArticlePageScores) && (
         <div className="mt-8 space-y-8">
           <ArticleElevenScoresPanel
             articleExplainability={articleExplainability}
-            articlePageScores={articlePageScores}
+            articlePageScores={normalizedArticlePageScores}
             articleTitle={report.title}
             storyExplainability={
               explainability && "story" in explainability && explainability.story
@@ -142,7 +176,7 @@ export function ReportView({
         </div>
       )}
 
-      {explainability && !articlePageMode && (
+      {!finalAnalysis && explainability && !articlePageMode && (
         <div className="mt-8 space-y-8">
           <ArticleWeightedScorePanel
             explainability={explainability.article}
@@ -152,13 +186,13 @@ export function ReportView({
         </div>
       )}
 
-      {finalIntelligence && (
+      {!finalAnalysis && finalIntelligence && (
         <div className="mt-8">
           <FinalIntelligencePanel scores={finalIntelligence} />
         </div>
       )}
 
-      {!articlePageMode && (
+      {showLegacyReport && !articlePageMode && (
         <div className="mt-8 grid gap-4 sm:grid-cols-4">
           {explainability ? (
             <ClickableScore
@@ -180,7 +214,7 @@ export function ReportView({
         </div>
       )}
 
-      {articlePageMode && (
+      {showLegacyReport && articlePageMode && (
         <div className="mt-8 grid gap-4 sm:grid-cols-4">
           <StatTile label="Verification confidence" value={`${report.overallConfidence}%`} />
           <StatTile label="Claims" value={report.claims.length} />
@@ -192,6 +226,7 @@ export function ReportView({
         </div>
       )}
 
+      {showLegacyReport ? (
       <div className="mt-8 rounded-xl border bg-card p-6">
         <h2 className="font-serif text-xl font-semibold">Executive summary</h2>
         <p className="mt-2 text-sm leading-relaxed text-foreground/90">{report.summary}</p>
@@ -209,8 +244,10 @@ export function ReportView({
           )}
         </div>
       </div>
+      ) : null}
 
-      {(() => {
+      {showLegacyReport &&
+        (() => {
         const gu = platformReport?.multiModelVerification?.geminiUsage as
           | {
               configured?: boolean;
@@ -222,30 +259,26 @@ export function ReportView({
           | undefined;
         const configured = gu?.configured;
         const liveCalls = gu?.liveApiCalls ?? 0;
-        const attempts = gu?.liveApiAttempts ?? 0;
-        const lastErr = gu?.lastApiError;
         const liveEvidence = gu?.liveEvidenceClaims ?? 0;
         if (!configured) {
           return (
-            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-              No Gemini key on this Worker. Add <code className="text-xs">GEMINI_API_KEY</code> as a
-              Cloudflare Secret on <strong>oscar</strong>, redeploy, then run a new analysis.
+            <p className="mt-8 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+              Live evidence retrieval is not available on this deployment. Some claims may show reduced
+              confidence until GEMINI_API_KEY is configured.
             </p>
           );
         }
         if (liveCalls === 0 && liveEvidence === 0) {
           return (
-            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-              Gemini is configured but this run made no successful live API calls
-              {attempts > 0 ? ` (${attempts} attempt(s))` : ""}.
-              {lastErr ? ` Last error: ${lastErr}.` : " Check Worker logs for model or quota errors."}{" "}
-              Run a <strong>new</strong> analysis after redeploying latest code.
+            <p className="mt-8 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+              Live evidence retrieval was temporarily limited for this run, so OSCAR lowered confidence for
+              some claims. Try again in a minute or use a shorter article.
             </p>
           );
         }
         return null;
       })()}
-        {platformReport?.multiModelVerification && (
+        {showLegacyReport && platformReport?.multiModelVerification && (
         <div className="mt-8 rounded-xl border bg-card p-6">
           <h2 className="font-serif text-xl font-semibold">Multi-model AI (OpenAI · Claude · Gemini)</h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -282,7 +315,7 @@ export function ReportView({
         </div>
       )}
 
-      {platformReport?.issueSummary && (
+      {showLegacyReport && platformReport?.issueSummary && (
         <div className="mt-8 rounded-xl border bg-secondary/20 p-6">
           <h2 className="font-serif text-xl font-semibold">Issue signals</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-4 text-sm">
@@ -306,6 +339,7 @@ export function ReportView({
         </div>
       )}
 
+      {showLegacyReport ? (
       <div className="mt-8 grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div>
           <h2 className="font-serif text-2xl font-semibold">Extracted claims</h2>
@@ -352,6 +386,7 @@ export function ReportView({
           )}
         </aside>
       </div>
+      ) : null}
 
       <ScoreExplainabilitySheet
         open={claimExplainOpen}

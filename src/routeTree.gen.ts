@@ -30,6 +30,7 @@ import { Route as AdminSourcesRouteImport } from './routes/admin.sources'
 import { Route as StoriesClusterIdArticleIdRouteImport } from './routes/stories.$clusterId.$articleId'
 import { Route as ApiStoriesTop100RouteImport } from './routes/api.stories.top-100'
 import { Route as ApiStoriesIdRouteImport } from './routes/api.stories.$id'
+import { Route as ApiDebugAnalyzeMinimalRouteImport } from './routes/api.debug.analyze-minimal'
 import { Route as ApiArticlesIdRouteImport } from './routes/api.articles.$id'
 import { Route as ApiAnalyzeUrlRouteImport } from './routes/api.analyze.url'
 import { Route as ApiAnalyzeTextRouteImport } from './routes/api.analyze.text'
@@ -144,6 +145,11 @@ const ApiStoriesIdRoute = ApiStoriesIdRouteImport.update({
   path: '/api/stories/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDebugAnalyzeMinimalRoute = ApiDebugAnalyzeMinimalRouteImport.update({
+  id: '/api/debug/analyze-minimal',
+  path: '/api/debug/analyze-minimal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiArticlesIdRoute = ApiArticlesIdRouteImport.update({
   id: '/api/articles/$id',
   path: '/api/articles/$id',
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/api/analyze/text': typeof ApiAnalyzeTextRoute
   '/api/analyze/url': typeof ApiAnalyzeUrlRoute
   '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/debug/analyze-minimal': typeof ApiDebugAnalyzeMinimalRoute
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
@@ -234,6 +241,7 @@ export interface FileRoutesByTo {
   '/api/analyze/text': typeof ApiAnalyzeTextRoute
   '/api/analyze/url': typeof ApiAnalyzeUrlRoute
   '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/debug/analyze-minimal': typeof ApiDebugAnalyzeMinimalRoute
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/api/analyze/text': typeof ApiAnalyzeTextRoute
   '/api/analyze/url': typeof ApiAnalyzeUrlRoute
   '/api/articles/$id': typeof ApiArticlesIdRoute
+  '/api/debug/analyze-minimal': typeof ApiDebugAnalyzeMinimalRoute
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
@@ -297,6 +306,7 @@ export interface FileRouteTypes {
     | '/api/analyze/text'
     | '/api/analyze/url'
     | '/api/articles/$id'
+    | '/api/debug/analyze-minimal'
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
     | '/api/analyze/text'
     | '/api/analyze/url'
     | '/api/articles/$id'
+    | '/api/debug/analyze-minimal'
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
@@ -356,6 +367,7 @@ export interface FileRouteTypes {
     | '/api/analyze/text'
     | '/api/analyze/url'
     | '/api/articles/$id'
+    | '/api/debug/analyze-minimal'
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
@@ -384,6 +396,7 @@ export interface RootRouteChildren {
   ApiAnalyzeTextRoute: typeof ApiAnalyzeTextRoute
   ApiAnalyzeUrlRoute: typeof ApiAnalyzeUrlRoute
   ApiArticlesIdRoute: typeof ApiArticlesIdRoute
+  ApiDebugAnalyzeMinimalRoute: typeof ApiDebugAnalyzeMinimalRoute
   ApiStoriesIdRoute: typeof ApiStoriesIdRoute
   ApiStoriesTop100Route: typeof ApiStoriesTop100Route
   ApiAnalyzeStatusRequestIdRoute: typeof ApiAnalyzeStatusRequestIdRoute
@@ -540,6 +553,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStoriesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/debug/analyze-minimal': {
+      id: '/api/debug/analyze-minimal'
+      path: '/api/debug/analyze-minimal'
+      fullPath: '/api/debug/analyze-minimal'
+      preLoaderRoute: typeof ApiDebugAnalyzeMinimalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/articles/$id': {
       id: '/api/articles/$id'
       path: '/api/articles/$id'
@@ -647,6 +667,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAnalyzeTextRoute: ApiAnalyzeTextRoute,
   ApiAnalyzeUrlRoute: ApiAnalyzeUrlRoute,
   ApiArticlesIdRoute: ApiArticlesIdRoute,
+  ApiDebugAnalyzeMinimalRoute: ApiDebugAnalyzeMinimalRoute,
   ApiStoriesIdRoute: ApiStoriesIdRoute,
   ApiStoriesTop100Route: ApiStoriesTop100Route,
   ApiAnalyzeStatusRequestIdRoute: ApiAnalyzeStatusRequestIdRoute,

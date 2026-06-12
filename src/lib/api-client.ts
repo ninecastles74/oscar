@@ -8,8 +8,8 @@ type ApiError = {
 
 type ApiSuccess<T> = { success: true } & T;
 
-const DEFAULT_TIMEOUT_MS = 120_000;
-const ANALYZE_TIMEOUT_MS = 600_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const ANALYZE_TIMEOUT_MS = 60_000;
 
 function timeoutMsFor(url: string): number {
   if (url.includes("/api/analyze/")) return ANALYZE_TIMEOUT_MS;

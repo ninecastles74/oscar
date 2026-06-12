@@ -15,10 +15,12 @@ import { sanitizeApiSecretOrUndefined } from "../../ai/sanitize-api-secret";
 import { env as cloudflareEnv } from "cloudflare:workers";
 import type { ClassifiedClaim } from "./types";
 
-const MAX_TOTAL_CLAIMS = Number(getServerEnv("LIVE_EVIDENCE_MAX_CLAIMS")) || 5;
+import { ANALYSIS_TIMEOUTS } from "../timeouts";
+
+const MAX_TOTAL_CLAIMS = ANALYSIS_TIMEOUTS.maxClaims;
 const BATCH_SIZE = Number(getServerEnv("LIVE_EVIDENCE_BATCH_SIZE")) || 2;
-const MAX_CLAIM_RETRIES = Number(getServerEnv("LIVE_EVIDENCE_CLAIM_RETRIES")) || 2;
-const CLAIM_TIMEOUT_MS = Number(getServerEnv("LIVE_EVIDENCE_CLAIM_TIMEOUT_MS")) || 45_000;
+const MAX_CLAIM_RETRIES = ANALYSIS_TIMEOUTS.maxProviderRetries;
+const CLAIM_TIMEOUT_MS = ANALYSIS_TIMEOUTS.evidenceClaimMs;
 const BACKOFF_BASE_MS = Number(getServerEnv("LIVE_EVIDENCE_BACKOFF_MS")) || 1500;
 
 export interface LiveEvidenceRetrievalResult {

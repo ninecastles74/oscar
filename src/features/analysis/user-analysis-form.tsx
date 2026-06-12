@@ -8,13 +8,14 @@ import { getAccessToken } from "@/lib/auth-session";
 import { getAnonymousId } from "@/lib/anonymous-id";
 import { ReportView } from "@/features/reports/report-view";
 import type { AnalysisReport, FinalIntelligenceSummary } from "@/types/news-platform";
-import { QuotaBanner, type QuotaInfo } from "./quota-banner";
+import { userFacingAnalysisError } from "@/lib/user-facing-errors";
 
 type CompletedAnalysis = {
   report: ReturnType<typeof analysisReportToManualReport>;
   platformReport: AnalysisReport;
   explainability?: unknown;
   finalIntelligence?: FinalIntelligenceSummary;
+  finalAnalysis?: import("@/lib/final-analysis-report").FinalAnalysisReport;
   requestId: string;
 };
 
@@ -41,6 +42,7 @@ function snapshotFromResponse(
       (result.finalIntelligence as FinalIntelligenceSummary | undefined) ??
       snap?.finalIntelligence,
     explainability: result.explainability,
+    finalAnalysis: result.finalAnalysis as CompletedAnalysis["finalAnalysis"],
   };
 }
 
@@ -98,6 +100,7 @@ export function UserAnalysisForm({
         platformReport?: AnalysisReport;
         finalIntelligence?: FinalIntelligenceSummary;
         explainability?: unknown;
+        finalAnalysis?: import("@/lib/final-analysis-report").FinalAnalysisReport;
         analysisSnapshot?: {
           report: AnalysisReport;
           reliability?: unknown;
@@ -109,7 +112,7 @@ export function UserAnalysisForm({
 
       if (!result.success) {
         if (result.quota) setQuota(result.quota);
-        setError(result.details ? `${result.error} (${result.details})` : result.error);
+        setError(userFacingAnalysisError(result.error, result.details, result.code));
         return;
       }
 
@@ -162,6 +165,7 @@ export function UserAnalysisForm({
         report={completed.report}
         platformReport={completed.platformReport}
         explainability={completed.explainability}
+        finalAnalysis={completed.finalAnalysis}
         finalIntelligence={completed.finalIntelligence}
       />
     );

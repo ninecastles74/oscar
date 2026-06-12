@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
+import { buildFinalAnalysisReport } from "@/lib/final-analysis-report";
 import { runGatedUserAnalysis } from "../analysis/api-run";
 import { getManualAnalysisResult, getManualAnalysisStatus } from "../analysis/manual";
 import { loadManualReliability } from "../analysis/manual-persist";
@@ -160,6 +161,13 @@ async function buildArticleAnalysisResponse(
     platformReport: bundle.report,
     reliability,
     explainability,
+    finalAnalysis: buildFinalAnalysisReport({
+      report: bundle.report,
+      reliability,
+      explainability,
+      stagesCompleted: ["verification", "multi_model", "reliability", "claim_consensus"],
+      stagesFailedOrLimited: bundle.report.pipelineWarnings?.map((w) => w.code) ?? [],
+    }),
     articlePageScores,
     storyReport: storyReport ?? null,
   };
@@ -253,6 +261,21 @@ function handleManualAnalysisResult(
     claims: platformReport?.claims?.length ?? 0,
   });
 
+  const finalAnalysis =
+    platformReport && result.analysisSnapshot
+      ? buildFinalAnalysisReport({
+          report: platformReport,
+          reliability: result.analysisSnapshot.reliability,
+          explainability,
+          stagesCompleted: platformReport.multiModelVerification
+            ? ["verification", "multi_model", "reliability"]
+            : ["verification", "reliability"],
+          stagesFailedOrLimited:
+            platformReport.pipelineWarnings?.map((w) => w.code) ??
+            (result.analysisSnapshot.reliability ? [] : ["reliability_optional"]),
+        })
+      : undefined;
+
   return jsonOk({
     requestId: result.requestId,
     submissionId: result.submissionId,
@@ -263,6 +286,7 @@ function handleManualAnalysisResult(
     platformReport,
     report: platformReport ? analysisReportToManualReport(platformReport) : undefined,
     explainability,
+    finalAnalysis,
     finalIntelligence: result.analysisSnapshot?.finalIntelligence,
     failedMessage: result.failedMessage,
     envWarning: result.envWarning,
@@ -361,6 +385,7 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
   const result = await getManualAnalysisResult(requestId);
   if (result) {
     let explainability;
+    let finalAnalysis;
     if (result.reliability) {
       try {
         explainability = buildFullExplainabilityBundle(
@@ -368,6 +393,13 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
           result.reliability,
           getVerificationSnapshot(result.request.id)?.results,
         );
+        finalAnalysis = buildFinalAnalysisReport({
+          report: result.report,
+          reliability: result.reliability,
+          explainability,
+          stagesCompleted: ["verification", "multi_model", "reliability"],
+          stagesFailedOrLimited: result.report.pipelineWarnings?.map((w) => w.code) ?? [],
+        });
       } catch (err) {
         console.warn(
           "[api/analyze/status] explainability skipped:",
@@ -382,6 +414,7 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
       platformReport: result.report,
       reliability: result.reliability,
       explainability,
+      finalAnalysis,
       finalIntelligence: result.finalIntelligence,
     });
   }
@@ -420,6 +453,13 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
         /* optional */
       }
     }
+    const finalAnalysis = buildFinalAnalysisReport({
+      report: status.report,
+      reliability,
+      explainability,
+      stagesCompleted: ["verification", "multi_model", "reliability"],
+      stagesFailedOrLimited: status.report.pipelineWarnings?.map((w) => w.code) ?? [],
+    });
     return jsonOk({
       requestId: status.id,
       status: "completed" as const,
@@ -427,6 +467,7 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
       platformReport: status.report,
       reliability,
       explainability,
+      finalAnalysis,
       finalIntelligence: status.finalIntelligence,
     });
   }

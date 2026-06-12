@@ -96,11 +96,14 @@ async function verifyOneClaim(
       evidence: evidencePayload,
       role: "primary",
     });
-    if (!primary) {
-      const err = getLastOpenAiError();
-      liveAiError(
-        `OpenAI primary verification failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
-      );
+    if (!primary && isGeminiLiveEnabled()) {
+      stages.push("gemini_primary_fallback");
+      primary = await verifyClaimWithGemini({
+        claimId: claim.id,
+        claimText: claim.text,
+        evidence: evidencePayload,
+        role: "primary",
+      });
     }
   } else if (isGeminiLiveEnabled()) {
     stages.push("gemini_primary");
@@ -110,11 +113,17 @@ async function verifyOneClaim(
       evidence: evidencePayload,
       role: "primary",
     });
-    if (!primary) {
-      liveAiError(`Gemini primary verification failed for claim "${claim.text.slice(0, 80)}…"`);
-    }
-  } else {
-    liveAiError("Configure OPENAI_API_KEY or GEMINI_API_KEY for live multi-model verification.");
+  }
+
+  if (!primary) {
+    stages.push("primary_degraded");
+    return {
+      verification: pipelineFallbackVerification(
+        claim,
+        "Live model verification was temporarily unavailable; using pipeline evidence scores.",
+      ),
+      stages,
+    };
   }
 
   let review: ModelClaimVerdict | null = null;
@@ -130,10 +139,17 @@ async function verifyOneClaim(
         priorVerdict: primary,
       });
       if (!review) {
-        const err = getLastAnthropicError();
-        liveAiError(
-          `Anthropic review failed for claim "${claim.text.slice(0, 80)}…"${err ? `: ${err}` : ""}`,
-        );
+        stages.push("review_degraded");
+        review = {
+          provider: "anthropic",
+          model: "unavailable",
+          role: "review",
+          verdict: primary.verdict,
+          confidence: primary.confidence,
+          reasoning: "Review model was temporarily unavailable; using primary verdict.",
+          skipped: true,
+          skipReason: "review_unavailable",
+        };
       }
     } else if (isGeminiLiveEnabled()) {
       stages.push("gemini_review");
@@ -145,10 +161,29 @@ async function verifyOneClaim(
         priorVerdict: primary,
       });
       if (!review) {
-        liveAiError(`Gemini review failed for claim "${claim.text.slice(0, 80)}…"`);
+        stages.push("review_degraded");
+        review = {
+          provider: "google",
+          model: "unavailable",
+          role: "review",
+          verdict: primary.verdict,
+          confidence: primary.confidence,
+          reasoning: "Review model was temporarily unavailable; using primary verdict.",
+          skipped: true,
+          skipReason: "review_unavailable",
+        };
       }
     } else {
-      liveAiError("Uncertain claim requires Anthropic or Gemini for live review.");
+      review = {
+        provider: "anthropic",
+        model: "skipped",
+        role: "review",
+        verdict: primary.verdict,
+        confidence: primary.confidence,
+        reasoning: "Review skipped — no secondary model configured.",
+        skipped: true,
+        skipReason: "not_configured",
+      };
     }
   } else {
     review = {
@@ -163,14 +198,22 @@ async function verifyOneClaim(
     };
   }
 
-  if (!isGeminiLiveEnabled()) {
-    liveAiError("GEMINI_API_KEY is required for live corroboration with Google Search.");
-  }
-
   const hasLiveWebEvidence = evidence.some((e) => e.id?.includes("-live-e"));
   let corroboration: ModelClaimVerdict | null = null;
 
-  if (hasLiveWebEvidence) {
+  if (!isGeminiLiveEnabled()) {
+    stages.push("corroboration_skipped");
+    corroboration = {
+      provider: "google",
+      model: "skipped",
+      role: "corroboration",
+      verdict: (review.skipped ? primary : review).verdict,
+      confidence: (review.skipped ? primary : review).confidence,
+      reasoning: "Gemini corroboration skipped — key not configured.",
+      skipped: true,
+      skipReason: "not_configured",
+    };
+  } else if (hasLiveWebEvidence) {
     const prior = review.skipped ? primary : review;
     stages.push("gemini_corroboration_live_evidence");
     corroboration = {
