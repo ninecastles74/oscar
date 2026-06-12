@@ -88,23 +88,18 @@ export const getTop100Feed = createServerFn({ method: "GET" }).handler(async () 
     let bootstrap: Awaited<ReturnType<typeof bootstrapFeedIfEmpty>> | undefined;
     let clusters = await getTop100Clusters();
     if (clusters.length === 0) {
-      // Never block SSR on a full RSS/API ingest — bootstrap in the background when possible.
-      if (isFeedKvConfigured()) {
-        runInWorkerBackground(
-          bootstrapFeedIfEmpty()
-            .then((result) => console.log("[feed] background bootstrap", JSON.stringify(result)))
-            .catch((err) =>
-              console.error(
-                "[feed] background bootstrap failed:",
-                err instanceof Error ? err.message : err,
-              ),
+      // Never block navigation on a full RSS ingest — always bootstrap in the background.
+      runInWorkerBackground(
+        bootstrapFeedIfEmpty()
+          .then((result) => console.log("[feed] background bootstrap", JSON.stringify(result)))
+          .catch((err) =>
+            console.error(
+              "[feed] background bootstrap failed:",
+              err instanceof Error ? err.message : err,
             ),
-        );
-        bootstrap = { ran: false, reason: "bootstrap_scheduled" };
-      } else {
-        bootstrap = await bootstrapFeedIfEmpty();
-        clusters = await getTop100Clusters();
-      }
+          ),
+      );
+      bootstrap = { ran: false, reason: "bootstrap_scheduled" };
     }
     const meta = getFeedMeta();
     return {

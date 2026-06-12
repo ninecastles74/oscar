@@ -13,8 +13,10 @@ const searchSchema = z.object({
   id: z.string().min(1),
 });
 
-const STALE_MS = 90 * 1000;
-const NOT_FOUND_GRACE_MS = 15 * 1000;
+/** Allow up to 8 min before showing timeout (pipeline wall is 10 min). */
+const STALE_MS = 8 * 60 * 1000;
+const NOT_FOUND_GRACE_MS = 20 * 1000;
+const POLL_MS = 2000;
 
 type ClientSnapshot = {
   report: AnalysisReport;
@@ -67,6 +69,7 @@ export const Route = createFileRoute("/analyze/results")({
         status: result.status ?? "processing",
         progress: "progress" in result ? result.progress : undefined,
         startedAt: "startedAt" in result ? result.startedAt : undefined,
+        pipelineError: "error" in result ? result.error : undefined,
         aiDiagnostics,
       };
     }
@@ -91,13 +94,20 @@ function AnalyzeResultsPage() {
   const requestId = "requestId" in data ? data.requestId : "";
   const [clientSnapshot, setClientSnapshot] = useState<ClientSnapshot | null>(null);
   const [pollStartedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     if (!requestId || typeof window === "undefined") return;
     const raw = sessionStorage.getItem(`oscar-manual-${requestId}`);
     if (!raw) return;
     try {
-      setClientSnapshot(JSON.parse(raw) as ClientSnapshot);
+      const parsed = JSON.parse(raw) as ClientSnapshot;
+      if (parsed.report) setClientSnapshot(parsed);
     } catch {
       /* ignore */
     }
@@ -105,47 +115,50 @@ function AnalyzeResultsPage() {
 
   const isPending = "pending" in data && data.pending;
   const isFailed = ("failed" in data && data.failed) || false;
+  const hasSnapshotReport = !!clientSnapshot?.report;
   const notFoundLost =
     isPending &&
     "notFound" in data &&
     data.notFound &&
-    !clientSnapshot &&
-    Date.now() - pollStartedAt > NOT_FOUND_GRACE_MS;
+    !hasSnapshotReport &&
+    now - pollStartedAt > NOT_FOUND_GRACE_MS;
   const stale =
     isPending &&
     !notFoundLost &&
     "startedAt" in data &&
     typeof data.startedAt === "string" &&
-    Date.now() - new Date(data.startedAt).getTime() > STALE_MS;
+    now - new Date(data.startedAt).getTime() > STALE_MS;
   const staleWithoutStartedAt =
     isPending &&
     !notFoundLost &&
     !("startedAt" in data && typeof data.startedAt === "string") &&
-    Date.now() - pollStartedAt > STALE_MS;
+    now - pollStartedAt > STALE_MS;
 
   useEffect(() => {
-    if (!isPending || isFailed || stale || staleWithoutStartedAt || notFoundLost || clientSnapshot) return;
+    if (!isPending || isFailed || stale || staleWithoutStartedAt || notFoundLost || hasSnapshotReport) {
+      return;
+    }
     const timer = setInterval(() => {
       void router.invalidate();
-    }, 2000);
+    }, POLL_MS);
     return () => clearInterval(timer);
-  }, [isPending, isFailed, stale, staleWithoutStartedAt, notFoundLost, clientSnapshot, router]);
+  }, [
+    isPending,
+    isFailed,
+    stale,
+    staleWithoutStartedAt,
+    notFoundLost,
+    hasSnapshotReport,
+    router,
+  ]);
 
-  if (clientSnapshot?.report) {
-    const aiDiag = "aiDiagnostics" in data ? data.aiDiagnostics : undefined;
+  if (hasSnapshotReport && clientSnapshot) {
     return (
-      <>
-        {aiDiag && typeof aiDiag === "object" && !("error" in aiDiag) && (
-          <div className="mx-auto max-w-6xl px-6 pt-4">
-            <p className="text-xs text-muted-foreground">Loaded from this browser session.</p>
-          </div>
-        )}
-        <ReportView
-          report={analysisReportToManualReport(clientSnapshot.report)}
-          platformReport={clientSnapshot.report}
-          finalIntelligence={clientSnapshot.finalIntelligence}
-        />
-      </>
+      <ReportView
+        report={analysisReportToManualReport(clientSnapshot.report)}
+        platformReport={clientSnapshot.report}
+        finalIntelligence={clientSnapshot.finalIntelligence}
+      />
     );
   }
 
@@ -164,18 +177,20 @@ function AnalyzeResultsPage() {
   }
 
   if (isFailed || stale || staleWithoutStartedAt || notFoundLost) {
-    const msg =
-      notFoundLost
-        ? "Analysis session was lost between requests. Enable FEED_KV on the oscar Worker (see wrangler.jsonc), redeploy, and run Ask Oscar again."
-        : isFailed && "errorMessage" in data && typeof data.errorMessage === "string"
-          ? data.errorMessage
-          : stale || staleWithoutStartedAt
-            ? "Analysis timed out. Enable FEED_KV on the oscar Worker for reliable background jobs, or retry with a shorter article."
-            : "Analysis could not be completed.";
+    const msg = notFoundLost
+      ? "Analysis session was lost between requests. Enable FEED_KV on the oscar Worker (see wrangler.jsonc), redeploy, and run Ask Oscar again."
+      : isFailed && "errorMessage" in data && typeof data.errorMessage === "string"
+        ? data.errorMessage
+        : stale || staleWithoutStartedAt
+          ? "Analysis timed out after several minutes. Try a shorter article, check GEMINI_API_KEY quota, or enable FEED_KV for background jobs."
+          : "Analysis could not be completed.";
     return (
       <main className="mx-auto max-w-lg px-6 py-20 text-center">
         <h1 className="text-xl font-semibold">Analysis failed</h1>
         <p className="mt-2 text-sm text-muted-foreground">{msg}</p>
+        {"pipelineError" in data && typeof data.pipelineError === "string" && data.pipelineError ? (
+          <p className="mt-2 text-xs text-destructive">{data.pipelineError}</p>
+        ) : null}
         <Link to="/analyze" className="mt-6 inline-block text-sm text-accent hover:underline">
           Try again
         </Link>
@@ -193,38 +208,34 @@ function AnalyzeResultsPage() {
           {typeof data.progress === "number" ? ` · ${data.progress}%` : ""}
         </p>
         <p className="mt-4 text-xs text-muted-foreground">
-          This page refreshes automatically. Live AI usually finishes within 1–3 minutes.
+          Live multi-model verification usually finishes within 1–4 minutes. This page refreshes
+          automatically.
         </p>
+        <p className="mt-2 font-mono text-[10px] text-muted-foreground">Request: {requestId}</p>
       </main>
     );
   }
 
-  const aiDiag = "aiDiagnostics" in data ? data.aiDiagnostics : undefined;
-
   if (!("report" in data) || !data.report) {
-    return null;
+    return (
+      <main className="mx-auto max-w-lg px-6 py-20 text-center">
+        <h1 className="text-xl font-semibold">No results</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The analysis completed but no report was returned.
+        </p>
+        <Link to="/analyze" className="mt-6 inline-block text-sm text-accent hover:underline">
+          Try again
+        </Link>
+      </main>
+    );
   }
 
   return (
-    <>
-      {aiDiag && typeof aiDiag === "object" && !("error" in aiDiag) && (
-        <div className="mx-auto max-w-6xl border-b bg-secondary/20 px-6 py-3 text-xs">
-          <p className="font-semibold">Server AI diagnostics (live)</p>
-          <p className="text-muted-foreground">
-            Google key detected: {aiDiag.googleKeyDetected ? "yes" : "no"}
-            {" · "}Configured: {(aiDiag.detectedAiEnvKeys ?? []).join(", ") || "none"}
-          </p>
-          {aiDiag.likelyOfflineReason && (
-            <p className="mt-1 text-muted-foreground">{aiDiag.likelyOfflineReason}</p>
-          )}
-        </div>
-      )}
-      <ReportView
-        report={data.report}
-        platformReport={data.platformReport}
-        explainability={data.explainability}
-        finalIntelligence={data.finalIntelligence}
-      />
-    </>
+    <ReportView
+      report={data.report}
+      platformReport={data.platformReport}
+      explainability={data.explainability}
+      finalIntelligence={data.finalIntelligence}
+    />
   );
 }

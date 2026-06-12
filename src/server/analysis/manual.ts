@@ -16,6 +16,7 @@ import {
   computeAndStoreReliabilityScores,
   getReliabilityBundleByArticleId,
 } from "../reliability/engine";
+import { saveVerificationSnapshot } from "../reliability/snapshots";
 import { buildTransparencyExplainabilityBundle } from "../transparency-explainability/build-bundle";
 import { buildFinalIntelligenceReport } from "../orchestration/build-final-intelligence";
 import type { ArticleOrchestrationReport } from "../orchestration/types";
@@ -136,19 +137,13 @@ export async function executeManualAnalysis(
     hasAnyAiApiKey(snap) ? listApiKeyEnvNames(snap).join(", ") : "(none)",
   );
   const request = await loadManualRequest(requestId);
-  if (!request?.submission) return;
+  if (!request?.submission) {
+    console.error("[executeManualAnalysis] request or submission missing:", requestId);
+    return;
+  }
 
   const submission =
     (await loadManualSubmission(request.submission.id)) ?? request.submission;
-  const input: BeginManualAnalysisInput = {
-    url: submission.url,
-    text: submission.text,
-    title: submission.title,
-    language: submission.language,
-    userNotes: submission.userNotes,
-    userId: request.userId,
-    analysisTrigger: "user",
-  };
 
   const failRequest = async (message: string) => {
     submission.status = "failed";
@@ -159,6 +154,21 @@ export async function executeManualAnalysis(
     await syncManualSubmission(submission);
     await syncManualRequest(request);
     console.error("[executeManualAnalysis]", message);
+  };
+
+  if (!submission) {
+    await failRequest("Analysis submission data was lost. Enable FEED_KV and retry.");
+    return;
+  }
+
+  const input: BeginManualAnalysisInput = {
+    url: submission.url,
+    text: submission.text,
+    title: submission.title,
+    language: submission.language,
+    userNotes: submission.userNotes,
+    userId: request.userId,
+    analysisTrigger: "user",
   };
 
   let wallTimer: ReturnType<typeof setTimeout> | undefined;
@@ -232,6 +242,8 @@ async function runManualAnalysisPipeline(
     assertLiveAnalysisReport(bundle.report, bundle.stages);
     const { report, results } = bundle;
 
+    saveVerificationSnapshot(requestId, report, results, pipelineArticle);
+
     const reliability = computeAndStoreReliabilityScores({
       report,
       results,
@@ -250,6 +262,7 @@ async function runManualAnalysisPipeline(
     request.progress = 100;
     request.completedAt = new Date().toISOString();
     request.report = reportWithConsensus;
+    request.reliability = reliability;
 
     await persistManualReliability(requestId, reliability);
     await syncManualSubmission(submission);
@@ -340,8 +353,9 @@ export async function getManualAnalysisResult(
   const reliability =
     getReliabilityBundleByArticleId(submission.id) ??
     getReliabilityBundleByArticleId(requestId) ??
-    (await loadManualReliability(requestId));
-  if (!reliability) return null;
+    request.reliability ??
+    (await loadManualReliability(requestId)) ??
+    undefined;
 
   return {
     request,

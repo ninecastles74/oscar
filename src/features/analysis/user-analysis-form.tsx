@@ -109,6 +109,10 @@ export function UserAnalysisForm({
         );
       }
 
+      if ("envWarning" in result && typeof result.envWarning === "string" && result.envWarning) {
+        console.warn("[Ask Oscar]", result.envWarning);
+      }
+
       if ("status" in result && result.status === "failed") {
         setError(
           ("failedMessage" in result && typeof result.failedMessage === "string"
@@ -116,6 +120,12 @@ export function UserAnalysisForm({
             : null) ?? "Analysis failed",
         );
         return;
+      }
+
+      if ("kvConfigured" in result && result.kvConfigured === false) {
+        console.warn(
+          "[Ask Oscar] FEED_KV not configured — results rely on this browser session until you enable KV.",
+        );
       }
 
       await goToResults(requestId);

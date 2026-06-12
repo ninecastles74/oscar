@@ -41,11 +41,13 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const result = await getManualAnalysisResult(data.requestId);
     if (result) {
-      const explainability = buildFullExplainabilityBundle(
-        result.report,
-        result.reliability,
-        getVerificationSnapshot(result.request.id)?.results,
-      );
+      const explainability = result.reliability
+        ? buildFullExplainabilityBundle(
+            result.report,
+            result.reliability,
+            getVerificationSnapshot(result.request.id)?.results,
+          )
+        : undefined;
       return {
         requestId: result.request.id,
         status: result.request.status,
@@ -80,12 +82,14 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
         status.reliability ??
         (await loadManualReliability(status.id));
 
-      if (status.report && reliability) {
-        const explainability = buildFullExplainabilityBundle(
-          status.report,
-          reliability,
-          getVerificationSnapshot(status.id)?.results,
-        );
+      if (status.report) {
+        const explainability = reliability
+          ? buildFullExplainabilityBundle(
+              status.report,
+              reliability,
+              getVerificationSnapshot(status.id)?.results,
+            )
+          : undefined;
         return {
           requestId: status.id,
           status: "completed" as const,
@@ -102,6 +106,7 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
         requestId: status.id,
         status: "failed" as const,
         errorMessage:
+          status.error ??
           "Analysis finished but the report could not be loaded. Enable FEED_KV on the oscar Worker for reliable results, then retry.",
         request: status,
       };

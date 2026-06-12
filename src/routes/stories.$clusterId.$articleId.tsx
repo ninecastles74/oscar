@@ -60,13 +60,15 @@ type CompletedAnalysis = {
 };
 
 type AnalyzeArticleResponse = {
-  status: "completed" | "processing";
+  status: "completed" | "processing" | "failed";
   report?: ReturnType<typeof analysisReportToManualReport>;
   platformReport?: AnalysisReport;
   explainability?: unknown;
   articlePageScores?: unknown;
   storyReport?: unknown;
 };
+
+const ARTICLE_STALE_MS = 8 * 60 * 1000;
 
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
@@ -75,10 +77,18 @@ function FeedArticleAnalysisRoute() {
   const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const triggered = useRef(false);
+  const [startedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   const isPending = "pendingAnalysis" in data && data.pendingAnalysis;
   const clusterId = data.clusterId;
   const articleId = "articleId" in data ? data.articleId : "";
+  const timedOut = isPending && !completed && !analysisError && now - startedAt > ARTICLE_STALE_MS;
 
   const runAnalysis = useCallback(async () => {
     if (!articleId) return;
@@ -111,7 +121,12 @@ function FeedArticleAnalysisRoute() {
 
       if (res.status === "processing") {
         void router.invalidate();
+        return;
       }
+
+      setAnalysisError(
+        `Unexpected analysis response (status: ${String((res as { status?: string }).status ?? "unknown")}). Try again.`,
+      );
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
@@ -158,24 +173,30 @@ function FeedArticleAnalysisRoute() {
   }
 
   if (isPending) {
+    const displayError =
+      analysisError ??
+      (timedOut
+        ? "Analysis timed out after several minutes. Check GEMINI_API_KEY quota and FEED_KV, then retry."
+        : null);
+
     return (
       <main className="mx-auto flex max-w-lg flex-col items-center px-6 py-24 text-center">
-        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+        {!displayError && <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />}
         <h1 className="mt-4 font-serif text-2xl font-semibold">
           {"title" in data ? data.title : "Article"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {analysisError ??
+          {displayError ??
             ("message" in data ? data.message : "Running live Oscar analysis for this article…")}
         </p>
-        {!analysisError && (
+        {!displayError && (
           <p className="mt-4 text-xs text-muted-foreground">
             {analysisRunning
-              ? "Analysis in progress — this may take 1–3 minutes."
+              ? "Analysis in progress — this may take 1–4 minutes."
               : "Starting Oscar analysis…"}
           </p>
         )}
-        {analysisError && (
+        {displayError && (
           <button
             type="button"
             onClick={() => {

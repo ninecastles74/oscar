@@ -30,6 +30,6 @@ export interface ManualAnalysisResponse {
   request: UserAnalysisRequest;
   submission: ManualSubmission;
   report: AnalysisReport;
-  reliability: ReliabilityScoreBundle;
+  reliability?: ReliabilityScoreBundle;
   finalIntelligence?: FinalIntelligenceSummary;
 }

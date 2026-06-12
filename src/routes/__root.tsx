@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -122,12 +123,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function NavigationPendingBar() {
+  const isLoading = useRouterState({ select: (s) => s.isLoading });
+  if (!isLoading) return null;
+  return (
+    <div className="flex h-0.5 w-full overflow-hidden bg-muted">
+      <div className="h-full w-1/3 animate-pulse bg-accent" />
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <SiteHeader />
+      <NavigationPendingBar />
       <Outlet />
       <SiteFooter />
     </QueryClientProvider>
