@@ -142,7 +142,23 @@ export async function runGatedUserAnalysis(
     );
   }
   const done = await getManualAnalysisStatus(requestId);
-  const status = mapAnalysisStatus(done?.status);
+  let status = mapAnalysisStatus(done?.status);
+
+  if (!done || status === "processing") {
+    console.error("[runGatedUserAnalysis] stuck in processing after execute", requestId);
+    return {
+      requestId,
+      submissionId,
+      status: "failed",
+      failedMessage:
+        done?.error ??
+        "Analysis did not finish in time. Try shorter text, check GEMINI_API_KEY, and retry.",
+      quota,
+      envKeysDetected: apiKeys,
+      kvConfigured,
+    };
+  }
+
   let full = status === "completed" ? await getManualAnalysisResult(requestId) : null;
 
   if (status === "completed" && !full && done?.report && done.submission) {

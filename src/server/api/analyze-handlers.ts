@@ -263,17 +263,27 @@ function handleManualAnalysisResult(
 
   const finalAnalysis =
     platformReport && result.analysisSnapshot
-      ? buildFinalAnalysisReport({
-          report: platformReport,
-          reliability: result.analysisSnapshot.reliability,
-          explainability,
-          stagesCompleted: platformReport.multiModelVerification
-            ? ["verification", "multi_model", "reliability"]
-            : ["verification", "reliability"],
-          stagesFailedOrLimited:
-            platformReport.pipelineWarnings?.map((w) => w.code) ??
-            (result.analysisSnapshot.reliability ? [] : ["reliability_optional"]),
-        })
+      ? (() => {
+          try {
+            return buildFinalAnalysisReport({
+              report: platformReport,
+              reliability: result.analysisSnapshot.reliability,
+              explainability,
+              stagesCompleted: platformReport.multiModelVerification
+                ? ["verification", "multi_model", "reliability"]
+                : ["verification", "reliability"],
+              stagesFailedOrLimited:
+                platformReport.pipelineWarnings?.map((w) => w.code) ??
+                (result.analysisSnapshot.reliability ? [] : ["reliability_optional"]),
+            });
+          } catch (err) {
+            console.warn(
+              "[api/analyze] finalAnalysis build skipped:",
+              err instanceof Error ? err.message : err,
+            );
+            return undefined;
+          }
+        })()
       : undefined;
 
   return jsonOk({

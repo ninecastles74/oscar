@@ -72,7 +72,7 @@ type AnalyzeArticleResponse = {
   storyReport?: unknown;
 };
 
-const ARTICLE_STALE_MS = 3 * 60 * 1000;
+const ARTICLE_STALE_MS = 100_000;
 
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
@@ -141,7 +141,13 @@ function FeedArticleAnalysisRoute() {
         `Unexpected analysis response (status: ${String((res as { status?: string }).status ?? "unknown")}). Try again.`,
       );
     } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
+      setAnalysisError(
+        userFacingAnalysisError(
+          err instanceof Error ? err.message : "Analysis failed",
+          undefined,
+          "NETWORK_ERROR",
+        ),
+      );
     } finally {
       setAnalysisRunning(false);
     }
@@ -184,7 +190,7 @@ function FeedArticleAnalysisRoute() {
     const displayError =
       analysisError ??
       (timedOut
-        ? "Analysis timed out after several minutes. Check GEMINI_API_KEY quota and FEED_KV, then retry."
+        ? userFacingAnalysisError("Analysis timed out", undefined, "TIMEOUT")
         : null);
 
     return (

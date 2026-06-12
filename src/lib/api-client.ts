@@ -9,7 +9,8 @@ type ApiError = {
 type ApiSuccess<T> = { success: true } & T;
 
 const DEFAULT_TIMEOUT_MS = 60_000;
-const ANALYZE_TIMEOUT_MS = 60_000;
+/** Must exceed backend wall timeout (90s) so sync analysis can finish before the client aborts. */
+const ANALYZE_TIMEOUT_MS = 100_000;
 
 function timeoutMsFor(url: string): number {
   if (url.includes("/api/analyze/")) return ANALYZE_TIMEOUT_MS;

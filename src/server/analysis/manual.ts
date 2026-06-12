@@ -137,9 +137,21 @@ export async function executeManualAnalysis(
     "[executeManualAnalysis] API keys visible:",
     hasAnyAiApiKey(snap) ? listApiKeyEnvNames(snap).join(", ") : "(none)",
   );
+
+  async function markRequestFailed(id: string, message: string) {
+    const req = await loadManualRequest(id);
+    if (!req) return;
+    req.status = "failed";
+    req.error = message;
+    req.completedAt = new Date().toISOString();
+    await syncManualRequest(req);
+  }
+
   const request = await loadManualRequest(requestId);
   if (!request?.submission) {
+    const message = "Analysis request data was lost before the pipeline could start. Retry from Ask Oscar.";
     console.error("[executeManualAnalysis] request or submission missing:", requestId);
+    await markRequestFailed(requestId, message);
     return;
   }
 
@@ -242,7 +254,21 @@ async function runManualAnalysisPipeline(
 
     console.log("[executeManualAnalysis] running multi-model enrichment", requestId);
     bundle = await enrichVerificationWithMultiModel(bundle, "user");
-    assertLiveAnalysisReport(bundle.report, bundle.stages);
+    try {
+      assertLiveAnalysisReport(bundle.report, bundle.stages);
+    } catch (guardErr) {
+      const guardMessage =
+        guardErr instanceof Error ? guardErr.message : "Live AI guard rejected partial results";
+      console.warn("[executeManualAnalysis] live-ai-guard (continuing with reduced confidence):", guardMessage);
+      bundle.report.pipelineWarnings = [
+        ...(bundle.report.pipelineWarnings ?? []),
+        {
+          code: "REDUCED_CONFIDENCE",
+          message:
+            "Live evidence retrieval was temporarily limited, so OSCAR lowered confidence for some claims.",
+        },
+      ];
+    }
     const { report, results } = bundle;
 
     saveVerificationSnapshot(requestId, report, results, pipelineArticle);

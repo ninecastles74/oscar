@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { FileText, Link2, Loader2, Sparkles } from "lucide-react";
 import { postJson } from "@/lib/api-client";
+import { getJson } from "@/lib/api-client";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { getAiUsageQuota } from "@/server/usage/functions";
 import { getAccessToken } from "@/lib/auth-session";
@@ -46,6 +47,30 @@ function snapshotFromResponse(
   };
 }
 
+async function pollManualAnalysis(requestId: string): Promise<CompletedAnalysis | null> {
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await getJson<{
+      status: "completed" | "failed" | "processing";
+      platformReport?: AnalysisReport;
+      report?: ReturnType<typeof analysisReportToManualReport>;
+      explainability?: unknown;
+      finalIntelligence?: FinalIntelligenceSummary;
+      finalAnalysis?: import("@/lib/final-analysis-report").FinalAnalysisReport;
+      errorMessage?: string;
+    }>(`/api/analyze/status/${encodeURIComponent(requestId)}`);
+
+    if (!res.success) continue;
+    if (res.status === "failed") return null;
+    if (res.status === "completed") {
+      const done = snapshotFromResponse(requestId, res as Record<string, unknown>);
+      if (done) return done;
+    }
+  }
+  return null;
+}
+
 export function UserAnalysisForm({
   badge,
   title,
@@ -61,6 +86,27 @@ export function UserAnalysisForm({
   const [error, setError] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  useEffect(() => {
+    if (!loading) {
+      setElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    const tick = setInterval(() => setElapsedSec(Math.floor((Date.now() - started) / 1000)), 1000);
+    const hardStop = setTimeout(() => {
+      setLoading(false);
+      setError((prev) =>
+        prev ??
+          "Analysis is taking longer than expected. Check GEMINI_API_KEY on the Worker, keep this tab open, and retry.",
+      );
+    }, 105_000);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(hardStop);
+    };
+  }, [loading]);
 
   useEffect(() => {
     void (async () => {
@@ -125,11 +171,16 @@ export function UserAnalysisForm({
       }
 
       if (result.status === "failed") {
-        setError(result.failedMessage ?? "Analysis failed");
+        setError(userFacingAnalysisError(result.failedMessage ?? "Analysis failed", undefined, "ANALYSIS_FAILED"));
         return;
       }
 
       if (result.status === "processing") {
+        const polled = await pollManualAnalysis(requestId);
+        if (polled) {
+          setCompleted(polled);
+          return;
+        }
         setError(
           "Analysis is still running but no report was returned. Redeploy the latest build and enable FEED_KV, then retry.",
         );
@@ -153,7 +204,13 @@ export function UserAnalysisForm({
         "Analysis completed but the report was missing from the server response. Check worker logs and GEMINI_API_KEY, then retry.",
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
+      setError(
+        userFacingAnalysisError(
+          err instanceof Error ? err.message : "Analysis failed",
+          undefined,
+          "NETWORK_ERROR",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -249,12 +306,18 @@ export function UserAnalysisForm({
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> Running analysis…
+                {elapsedSec > 0 ? ` (${elapsedSec}s)` : ""}
               </>
             ) : (
               <>Run Oscar Analysis</>
             )}
           </button>
         </div>
+        {loading ? (
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Live analysis usually finishes within 1–2 minutes. Keep this tab open.
+          </p>
+        ) : null}
       </form>
     </>
   );
