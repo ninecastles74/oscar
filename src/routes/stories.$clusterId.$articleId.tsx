@@ -68,7 +68,7 @@ type AnalyzeArticleResponse = {
   storyReport?: unknown;
 };
 
-const ARTICLE_STALE_MS = 8 * 60 * 1000;
+const ARTICLE_STALE_MS = 3 * 60 * 1000;
 
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
