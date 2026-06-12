@@ -1,12 +1,46 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { FileText, Link2, Loader2, Sparkles } from "lucide-react";
 import { postJson } from "@/lib/api-client";
+import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { getAiUsageQuota } from "@/server/usage/functions";
 import { getAccessToken } from "@/lib/auth-session";
 import { getAnonymousId } from "@/lib/anonymous-id";
+import { ReportView } from "@/features/reports/report-view";
+import type { AnalysisReport, FinalIntelligenceSummary } from "@/types/news-platform";
 import { QuotaBanner, type QuotaInfo } from "./quota-banner";
+
+type CompletedAnalysis = {
+  report: ReturnType<typeof analysisReportToManualReport>;
+  platformReport: AnalysisReport;
+  finalIntelligence?: FinalIntelligenceSummary;
+  requestId: string;
+};
+
+function snapshotFromResponse(
+  requestId: string,
+  result: Record<string, unknown>,
+): CompletedAnalysis | null {
+  const snap = result.analysisSnapshot as
+    | {
+        report?: AnalysisReport;
+        finalIntelligence?: FinalIntelligenceSummary;
+      }
+    | undefined;
+  const platformReport =
+    (result.platformReport as AnalysisReport | undefined) ?? snap?.report;
+  if (!platformReport) return null;
+  return {
+    requestId,
+    platformReport,
+    report:
+      (result.report as ReturnType<typeof analysisReportToManualReport> | undefined) ??
+      analysisReportToManualReport(platformReport),
+    finalIntelligence:
+      (result.finalIntelligence as FinalIntelligenceSummary | undefined) ??
+      snap?.finalIntelligence,
+  };
+}
 
 export function UserAnalysisForm({
   badge,
@@ -17,12 +51,12 @@ export function UserAnalysisForm({
   title: string;
   description: string;
 }) {
-  const nav = useNavigate();
   const [tab, setTab] = useState<"url" | "text">("url");
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
+  const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -34,24 +68,12 @@ export function UserAnalysisForm({
     })();
   }, []);
 
-  const goToResults = async (requestId: string) => {
-    const search = { id: requestId };
-    try {
-      await nav({ to: "/analyze/results", search, replace: true });
-    } catch {
-      /* router navigate failed — hard redirect */
-    }
-    if (typeof window !== "undefined" && !window.location.pathname.endsWith("/analyze/results")) {
-      const qs = new URLSearchParams(search).toString();
-      window.location.assign(`/analyze/results?${qs}`);
-    }
-  };
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     flushSync(() => {
       setLoading(true);
       setError(null);
+      setCompleted(null);
     });
 
     try {
@@ -70,10 +92,13 @@ export function UserAnalysisForm({
         quota?: QuotaInfo;
         kvConfigured?: boolean;
         failedMessage?: string;
+        report?: ReturnType<typeof analysisReportToManualReport>;
+        platformReport?: AnalysisReport;
+        finalIntelligence?: FinalIntelligenceSummary;
         analysisSnapshot?: {
-          report: unknown;
+          report: AnalysisReport;
           reliability?: unknown;
-          finalIntelligence?: unknown;
+          finalIntelligence?: FinalIntelligenceSummary;
           submission?: unknown;
         };
         error?: { code?: string; message?: string; quota?: QuotaInfo };
@@ -87,73 +112,56 @@ export function UserAnalysisForm({
 
       if (result.quota) setQuota(result.quota);
 
-      const requestId =
-        result.requestId ??
-        (typeof result === "object" && result !== null && "data" in result
-          ? (result as { data?: { requestId?: string } }).data?.requestId
-          : undefined);
-
+      const requestId = result.requestId;
       if (!requestId) {
         setError("No request id returned from server");
         return;
       }
 
-      if ("status" in result && result.status === "failed") {
+      if (result.status === "failed") {
+        setError(result.failedMessage ?? "Analysis failed");
+        return;
+      }
+
+      if (result.status === "processing") {
         setError(
-          ("failedMessage" in result && typeof result.failedMessage === "string"
-            ? result.failedMessage
-            : null) ?? "Analysis failed",
+          "Analysis is still running but no report was returned. Redeploy the latest build and enable FEED_KV, then retry.",
         );
         return;
       }
 
-      if (
-        "analysisSnapshot" in result &&
-        result.analysisSnapshot &&
-        typeof window !== "undefined"
-      ) {
+      if (result.analysisSnapshot && typeof window !== "undefined") {
         sessionStorage.setItem(
           `oscar-manual-${requestId}`,
           JSON.stringify(result.analysisSnapshot),
         );
-      } else if (
-        "status" in result &&
-        result.status === "completed" &&
-        typeof window !== "undefined"
-      ) {
-        console.warn(
-          "[Ask Oscar] Analysis completed but no snapshot in response — results page will poll the server.",
-        );
       }
 
-      if ("envWarning" in result && typeof result.envWarning === "string" && result.envWarning) {
-        console.warn("[Ask Oscar]", result.envWarning);
-      }
-
-      if ("kvConfigured" in result && result.kvConfigured === false) {
-        console.warn(
-          "[Ask Oscar] FEED_KV not configured — results rely on this browser session until you enable KV.",
-        );
-      }
-
-      if (
-        "status" in result &&
-        result.status === "processing" &&
-        !("analysisSnapshot" in result && result.analysisSnapshot)
-      ) {
-        setError(
-          "Analysis is still running on the server but no results were returned. Enable FEED_KV or retry.",
-        );
+      const done = snapshotFromResponse(requestId, result as Record<string, unknown>);
+      if (done) {
+        setCompleted(done);
         return;
       }
 
-      await goToResults(requestId);
+      setError(
+        "Analysis completed but the report was missing from the server response. Check worker logs and GEMINI_API_KEY, then retry.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setLoading(false);
     }
   };
+
+  if (completed) {
+    return (
+      <ReportView
+        report={completed.report}
+        platformReport={completed.platformReport}
+        finalIntelligence={completed.finalIntelligence}
+      />
+    );
+  }
 
   return (
     <>

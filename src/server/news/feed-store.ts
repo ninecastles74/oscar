@@ -306,14 +306,27 @@ export function markArticleAnalyzed(
   bundle: AnalyzedArticleBundle,
   pageScores?: import("@/types/article-page-scores").ArticlePageScores,
 ): void {
-  const a = state.articles.get(articleId);
-  if (!a) return;
-  state.articles.set(articleId, {
-    ...a,
-    analyzedAt: nowIso(),
-    analysisVersion: (a.analysisVersion ?? 0) + 1,
-  });
   state.articleBundles.set(articleId, bundle);
+  const a =
+    state.articles.get(articleId) ??
+    [...state.articles.entries()].find(
+      ([id, article]) =>
+        id === articleId ||
+        article.id === articleId ||
+        article.url === articleId ||
+        article.id === bundle.articleId,
+    )?.[1];
+  if (a) {
+    const key =
+      state.articles.has(articleId)
+        ? articleId
+        : [...state.articles.entries()].find(([, article]) => article === a)?.[0] ?? articleId;
+    state.articles.set(key, {
+      ...a,
+      analyzedAt: nowIso(),
+      analysisVersion: (a.analysisVersion ?? 0) + 1,
+    });
+  }
   if (pageScores) saveArticlePageScores(pageScores);
   void saveArticleBundleToKv(articleId, bundle);
 }

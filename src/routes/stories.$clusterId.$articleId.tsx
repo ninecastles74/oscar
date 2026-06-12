@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ReportView } from "@/features/reports/report-view";
@@ -72,7 +72,6 @@ const ARTICLE_STALE_MS = 3 * 60 * 1000;
 
 function FeedArticleAnalysisRoute() {
   const data = Route.useLoaderData();
-  const router = useRouter();
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<CompletedAnalysis | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
@@ -120,7 +119,9 @@ function FeedArticleAnalysisRoute() {
       }
 
       if (res.status === "processing") {
-        void router.invalidate();
+        setAnalysisError(
+          "Analysis started in the background but no report was returned. Redeploy with FEED_KV enabled or retry.",
+        );
         return;
       }
 
@@ -132,19 +133,13 @@ function FeedArticleAnalysisRoute() {
     } finally {
       setAnalysisRunning(false);
     }
-  }, [articleId, clusterId, router]);
+  }, [articleId, clusterId]);
 
   useEffect(() => {
     if (!isPending || triggered.current) return;
     triggered.current = true;
     void runAnalysis();
   }, [isPending, runAnalysis]);
-
-  useEffect(() => {
-    if (!isPending || completed || analysisError || analysisRunning) return;
-    const timer = setInterval(() => void router.invalidate(), 2500);
-    return () => clearInterval(timer);
-  }, [isPending, completed, analysisError, analysisRunning, router]);
 
   if (completed) {
     return (

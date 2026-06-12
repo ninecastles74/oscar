@@ -36,6 +36,7 @@ import { Route as ApiAnalyzeTextRouteImport } from './routes/api.analyze.text'
 import { Route as ApiAnalyzeArticleRouteImport } from './routes/api.analyze.article'
 import { Route as ApiExplainEntityTypeEntityIdRouteImport } from './routes/api.explain.$entityType.$entityId'
 import { Route as ApiDebugArticleIdRouteImport } from './routes/api.debug.article.$id'
+import { Route as ApiAnalyzeStatusRequestIdRouteImport } from './routes/api.analyze.status.$requestId'
 
 const StoriesRoute = StoriesRouteImport.update({
   id: '/stories',
@@ -174,6 +175,12 @@ const ApiDebugArticleIdRoute = ApiDebugArticleIdRouteImport.update({
   path: '/api/debug/article/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAnalyzeStatusRequestIdRoute =
+  ApiAnalyzeStatusRequestIdRouteImport.update({
+    id: '/api/analyze/status/$requestId',
+    path: '/api/analyze/status/$requestId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByFullPath {
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/analyze/status/$requestId': typeof ApiAnalyzeStatusRequestIdRoute
   '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
   '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
@@ -229,6 +237,7 @@ export interface FileRoutesByTo {
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/analyze/status/$requestId': typeof ApiAnalyzeStatusRequestIdRoute
   '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
   '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
@@ -259,6 +268,7 @@ export interface FileRoutesById {
   '/api/stories/$id': typeof ApiStoriesIdRoute
   '/api/stories/top-100': typeof ApiStoriesTop100Route
   '/stories/$clusterId/$articleId': typeof StoriesClusterIdArticleIdRoute
+  '/api/analyze/status/$requestId': typeof ApiAnalyzeStatusRequestIdRoute
   '/api/debug/article/$id': typeof ApiDebugArticleIdRoute
   '/api/explain/$entityType/$entityId': typeof ApiExplainEntityTypeEntityIdRoute
 }
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/analyze/status/$requestId'
     | '/api/debug/article/$id'
     | '/api/explain/$entityType/$entityId'
   fileRoutesByTo: FileRoutesByTo
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/analyze/status/$requestId'
     | '/api/debug/article/$id'
     | '/api/explain/$entityType/$entityId'
   id:
@@ -347,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/stories/$id'
     | '/api/stories/top-100'
     | '/stories/$clusterId/$articleId'
+    | '/api/analyze/status/$requestId'
     | '/api/debug/article/$id'
     | '/api/explain/$entityType/$entityId'
   fileRoutesById: FileRoutesById
@@ -373,6 +386,7 @@ export interface RootRouteChildren {
   ApiArticlesIdRoute: typeof ApiArticlesIdRoute
   ApiStoriesIdRoute: typeof ApiStoriesIdRoute
   ApiStoriesTop100Route: typeof ApiStoriesTop100Route
+  ApiAnalyzeStatusRequestIdRoute: typeof ApiAnalyzeStatusRequestIdRoute
   ApiDebugArticleIdRoute: typeof ApiDebugArticleIdRoute
   ApiExplainEntityTypeEntityIdRoute: typeof ApiExplainEntityTypeEntityIdRoute
 }
@@ -568,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDebugArticleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/analyze/status/$requestId': {
+      id: '/api/analyze/status/$requestId'
+      path: '/api/analyze/status/$requestId'
+      fullPath: '/api/analyze/status/$requestId'
+      preLoaderRoute: typeof ApiAnalyzeStatusRequestIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -628,6 +649,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiArticlesIdRoute: ApiArticlesIdRoute,
   ApiStoriesIdRoute: ApiStoriesIdRoute,
   ApiStoriesTop100Route: ApiStoriesTop100Route,
+  ApiAnalyzeStatusRequestIdRoute: ApiAnalyzeStatusRequestIdRoute,
   ApiDebugArticleIdRoute: ApiDebugArticleIdRoute,
   ApiExplainEntityTypeEntityIdRoute: ApiExplainEntityTypeEntityIdRoute,
 }

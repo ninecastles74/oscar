@@ -14,8 +14,9 @@ const searchSchema = z.object({
 });
 
 const POLL_MS = 2000;
-const NOT_FOUND_MS = 15_000;
-const STALE_MS = 3 * 60 * 1000;
+const NOT_FOUND_MS = 10_000;
+const STALE_MS = 90_000;
+const MAX_POLL_FAILURES = 3;
 
 type ClientSnapshot = {
   report: AnalysisReport;
@@ -76,6 +77,7 @@ function AnalyzeResultsPage() {
   });
   const pollStartedAt = useRef(Date.now());
   const completedRef = useRef(state.phase === "completed");
+  const pollFailuresRef = useRef(0);
 
   useEffect(() => {
     if (completedRef.current) return;
@@ -109,25 +111,34 @@ function AnalyzeResultsPage() {
       if (cancelled) return;
 
       if (!res.success) {
-        const isNotFound = res.code === "NOT_FOUND" || res.details?.includes("404");
-        if (isNotFound && elapsed >= NOT_FOUND_MS) {
+        pollFailuresRef.current += 1;
+        const isNotFound =
+          res.code === "NOT_FOUND" ||
+          res.details?.includes("404") ||
+          res.details?.includes("HTTP 404");
+        if (
+          isNotFound &&
+          (elapsed >= NOT_FOUND_MS || pollFailuresRef.current >= MAX_POLL_FAILURES)
+        ) {
           finish({
             phase: "failed",
-            message: "Analysis session was lost between requests.",
+            message: "Could not reach the analysis status API.",
             detail:
-              "Enable FEED_KV on the oscar Worker (see wrangler.jsonc), redeploy, and run Ask Oscar again. Or submit a new analysis from the form.",
+              "The /api/analyze/status route may be missing from the deployed build. Redeploy the latest code, enable FEED_KV, or run a new analysis from /analyze.",
           });
           return;
         }
-        if (elapsed >= STALE_MS) {
+        if (pollFailuresRef.current >= MAX_POLL_FAILURES || elapsed >= STALE_MS) {
           finish({
             phase: "failed",
-            message: "Analysis timed out.",
+            message: "Could not load analysis results.",
             detail: res.details ? `${res.error} (${res.details})` : res.error,
           });
         }
         return;
       }
+
+      pollFailuresRef.current = 0;
 
       if (res.status === "completed" && (res.platformReport || res.report)) {
         const platformReport = res.platformReport;

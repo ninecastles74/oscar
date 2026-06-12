@@ -187,6 +187,7 @@ export async function handleAnalyzeText(request: Request): Promise<Response> {
     });
   }
 
+  const platformReport = result.analysisSnapshot?.report;
   return jsonOk({
     requestId: result.requestId,
     submissionId: result.submissionId,
@@ -194,6 +195,9 @@ export async function handleAnalyzeText(request: Request): Promise<Response> {
     quota: result.quota,
     kvConfigured: result.kvConfigured,
     analysisSnapshot: result.analysisSnapshot,
+    platformReport,
+    report: platformReport ? analysisReportToManualReport(platformReport) : undefined,
+    finalIntelligence: result.analysisSnapshot?.finalIntelligence,
     failedMessage: result.failedMessage,
     envWarning: result.envWarning,
   });
@@ -222,6 +226,7 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     });
   }
 
+  const platformReport = result.analysisSnapshot?.report;
   return jsonOk({
     requestId: result.requestId,
     submissionId: result.submissionId,
@@ -229,6 +234,9 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     quota: result.quota,
     kvConfigured: result.kvConfigured,
     analysisSnapshot: result.analysisSnapshot,
+    platformReport,
+    report: platformReport ? analysisReportToManualReport(platformReport) : undefined,
+    finalIntelligence: result.analysisSnapshot?.finalIntelligence,
     failedMessage: result.failedMessage,
     envWarning: result.envWarning,
   });
