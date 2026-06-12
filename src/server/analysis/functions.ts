@@ -41,13 +41,21 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const result = await getManualAnalysisResult(data.requestId);
     if (result) {
-      const explainability = result.reliability
-        ? buildFullExplainabilityBundle(
+      let explainability;
+      if (result.reliability) {
+        try {
+          explainability = buildFullExplainabilityBundle(
             result.report,
             result.reliability,
             getVerificationSnapshot(result.request.id)?.results,
-          )
-        : undefined;
+          );
+        } catch (err) {
+          console.warn(
+            "[getManualAnalysis] explainability skipped:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
       return {
         requestId: result.request.id,
         status: result.request.status,
@@ -83,13 +91,21 @@ export const getManualAnalysis = createServerFn({ method: "GET" })
         (await loadManualReliability(status.id));
 
       if (status.report) {
-        const explainability = reliability
-          ? buildFullExplainabilityBundle(
+        let explainability;
+        if (reliability) {
+          try {
+            explainability = buildFullExplainabilityBundle(
               status.report,
               reliability,
               getVerificationSnapshot(status.id)?.results,
-            )
-          : undefined;
+            );
+          } catch (err) {
+            console.warn(
+              "[getManualAnalysis] explainability skipped:",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
         return {
           requestId: status.id,
           status: "completed" as const,

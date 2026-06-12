@@ -98,21 +98,6 @@ export function UserAnalysisForm({
         return;
       }
 
-      if (
-        "analysisSnapshot" in result &&
-        result.analysisSnapshot &&
-        typeof window !== "undefined"
-      ) {
-        sessionStorage.setItem(
-          `oscar-manual-${requestId}`,
-          JSON.stringify(result.analysisSnapshot),
-        );
-      }
-
-      if ("envWarning" in result && typeof result.envWarning === "string" && result.envWarning) {
-        console.warn("[Ask Oscar]", result.envWarning);
-      }
-
       if ("status" in result && result.status === "failed") {
         setError(
           ("failedMessage" in result && typeof result.failedMessage === "string"
@@ -122,10 +107,44 @@ export function UserAnalysisForm({
         return;
       }
 
+      if (
+        "analysisSnapshot" in result &&
+        result.analysisSnapshot &&
+        typeof window !== "undefined"
+      ) {
+        sessionStorage.setItem(
+          `oscar-manual-${requestId}`,
+          JSON.stringify(result.analysisSnapshot),
+        );
+      } else if (
+        "status" in result &&
+        result.status === "completed" &&
+        typeof window !== "undefined"
+      ) {
+        console.warn(
+          "[Ask Oscar] Analysis completed but no snapshot in response — results page will poll the server.",
+        );
+      }
+
+      if ("envWarning" in result && typeof result.envWarning === "string" && result.envWarning) {
+        console.warn("[Ask Oscar]", result.envWarning);
+      }
+
       if ("kvConfigured" in result && result.kvConfigured === false) {
         console.warn(
           "[Ask Oscar] FEED_KV not configured — results rely on this browser session until you enable KV.",
         );
+      }
+
+      if (
+        "status" in result &&
+        result.status === "processing" &&
+        !("analysisSnapshot" in result && result.analysisSnapshot)
+      ) {
+        setError(
+          "Analysis is still running on the server but no results were returned. Enable FEED_KV or retry.",
+        );
+        return;
       }
 
       await goToResults(requestId);

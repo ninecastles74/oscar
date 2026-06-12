@@ -6,7 +6,6 @@ import {
   getManualAnalysisResult,
   getManualAnalysisStatus,
 } from "./manual";
-import { runInWorkerBackground } from "../news/worker-env";
 import {
   captureWorkerEnvSnapshot,
   hasAnyAiApiKey,
@@ -131,32 +130,30 @@ export async function runGatedUserAnalysis(
 
   console.log("[runGatedUserAnalysis] pipeline started", { requestId, kvConfigured });
 
-  const runAnalysis = () =>
-    executeManualAnalysis(requestId, envSnapshot)
-      .then(() => console.log("[runGatedUserAnalysis] pipeline completed", requestId))
-      .catch((err) => {
-        console.error(
-          "[runGatedUserAnalysis] analysis failed:",
-          err instanceof Error ? err.message : err,
-        );
-      });
-
-  if (kvConfigured) {
-    runInWorkerBackground(runAnalysis());
-    return {
-      requestId,
-      submissionId,
-      status: "processing",
-      quota,
-      envKeysDetected: apiKeys,
-      kvConfigured: true,
-    };
+  // Always await user Ask Oscar analysis in this request so the client receives
+  // completed/failed status + snapshot (background jobs were losing state across isolates).
+  try {
+    await executeManualAnalysis(requestId, envSnapshot);
+    console.log("[runGatedUserAnalysis] pipeline completed", requestId);
+  } catch (err) {
+    console.error(
+      "[runGatedUserAnalysis] analysis failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
-
-  await runAnalysis();
   const done = await getManualAnalysisStatus(requestId);
   const status = mapAnalysisStatus(done?.status);
-  const full = status === "completed" ? await getManualAnalysisResult(requestId) : null;
+  let full = status === "completed" ? await getManualAnalysisResult(requestId) : null;
+
+  if (status === "completed" && !full && done?.report && done.submission) {
+    full = {
+      request: done,
+      submission: done.submission,
+      report: done.report,
+      reliability: done.reliability,
+      finalIntelligence: done.finalIntelligence,
+    };
+  }
 
   if (status === "completed" && !full) {
     return {

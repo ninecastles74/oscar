@@ -2,6 +2,7 @@ import { z } from "zod";
 import { analysisReportToManualReport } from "@/lib/analysis-adapter";
 import { runGatedUserAnalysis } from "../analysis/api-run";
 import { getManualAnalysisResult, getManualAnalysisStatus } from "../analysis/manual";
+import { loadManualReliability } from "../analysis/manual-persist";
 import { analyzeArticleHeavyweight, bundleNeedsAiReanalysis } from "../consensus/analyze-cluster-heavyweight";
 import { buildArticlePageScores } from "../consensus/article-page-scores";
 import { getStoryConsensus } from "../consensus/store";
@@ -318,17 +319,31 @@ export async function handleAnalyzeArticle(request: Request): Promise<Response> 
 }
 
 export async function handleGetManualAnalysis(requestId: string): Promise<Response> {
+  console.log("[api/analyze/status] poll", requestId);
+  ensureWorkerEnvFromPlatform();
+
   const result = await getManualAnalysisResult(requestId);
   if (result) {
-    const explainability = buildFullExplainabilityBundle(
-      result.report,
-      result.reliability,
-      getVerificationSnapshot(result.request.id)?.results,
-    );
+    let explainability;
+    if (result.reliability) {
+      try {
+        explainability = buildFullExplainabilityBundle(
+          result.report,
+          result.reliability,
+          getVerificationSnapshot(result.request.id)?.results,
+        );
+      } catch (err) {
+        console.warn(
+          "[api/analyze/status] explainability skipped:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
     return jsonOk({
       requestId: result.request.id,
       status: "completed" as const,
-      report: result.report,
+      report: analysisReportToManualReport(result.report),
+      platformReport: result.report,
       reliability: result.reliability,
       explainability,
       finalIntelligence: result.finalIntelligence,
@@ -337,7 +352,11 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
 
   const status = await getManualAnalysisStatus(requestId);
   if (!status) {
-    return jsonError("Analysis request not found", { status: 404, code: "NOT_FOUND" });
+    return jsonError("Analysis request not found", {
+      status: 404,
+      code: "NOT_FOUND",
+      details: `No record for ${requestId}. Enable FEED_KV or rerun analysis.`,
+    });
   }
 
   if (status.status === "failed") {
@@ -348,10 +367,41 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
     });
   }
 
+  if (status.status === "completed" && status.report) {
+    const reliability =
+      status.reliability ??
+      (await loadManualReliability(status.id)) ??
+      undefined;
+    let explainability;
+    if (reliability) {
+      try {
+        explainability = buildFullExplainabilityBundle(
+          status.report,
+          reliability,
+          getVerificationSnapshot(status.id)?.results,
+        );
+      } catch {
+        /* optional */
+      }
+    }
+    return jsonOk({
+      requestId: status.id,
+      status: "completed" as const,
+      report: analysisReportToManualReport(status.report),
+      platformReport: status.report,
+      reliability,
+      explainability,
+      finalIntelligence: status.finalIntelligence,
+    });
+  }
+
   if (status.status === "completed") {
-    return jsonError("Analysis finished but report could not be loaded", {
-      status: 500,
-      code: "LOAD_FAILED",
+    return jsonOk({
+      requestId: status.id,
+      status: "failed" as const,
+      errorMessage:
+        status.error ??
+        "Analysis finished but the report could not be loaded. Enable FEED_KV and retry.",
     });
   }
 
@@ -359,5 +409,7 @@ export async function handleGetManualAnalysis(requestId: string): Promise<Respon
     requestId: status.id,
     status: status.status,
     progress: status.progress,
+    errorMessage: status.error,
+    startedAt: status.startedAt,
   });
 }
