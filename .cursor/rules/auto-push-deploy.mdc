@@ -1,0 +1,16 @@
+---
+description: Always commit, push to GitHub, and redeploy after code changes unless the user opts out
+alwaysApply: true
+---
+
+# Auto push and deploy
+
+After making code changes in this project, unless the user explicitly says **not** to push/deploy:
+
+1. **Commit** all relevant changes with a clear message (user did not need to ask).
+2. **Push** to `origin` on the current branch (usually `main`).
+3. **Redeploy** with `npm run deploy` (Node 22+). If local deploy fails (missing `CLOUDFLARE_API_TOKEN`), note that push may still trigger Cloudflare Workers Builds from GitHub.
+
+Skip push/deploy only when the user says things like "don't push", "don't deploy", "local only", or "no commit".
+
+If deploy is blocked (missing KV binding, API token, etc.), report the blocker and what the user must configure in Cloudflare.
