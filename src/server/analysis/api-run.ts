@@ -165,7 +165,19 @@ export async function runGatedUserAnalysis(
         "Analysis finished but results could not be loaded. Enable FEED_KV on the oscar Worker for reliable Ask Oscar.",
       quota,
       envKeysDetected: apiKeys,
-      kvConfigured: false,
+      kvConfigured,
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      requestId,
+      submissionId,
+      status: "failed",
+      failedMessage: done?.error ?? "Analysis failed",
+      quota,
+      envKeysDetected: apiKeys,
+      kvConfigured,
     };
   }
 
@@ -176,7 +188,7 @@ export async function runGatedUserAnalysis(
     failedMessage: done?.error,
     quota,
     envKeysDetected: apiKeys,
-    kvConfigured: false,
+    kvConfigured,
     analysisSnapshot: full
       ? {
           report: full.report,

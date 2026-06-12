@@ -1,5 +1,4 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { clusterById } from "@/lib/mock-data";
 import { storyClusterToUiCluster } from "@/lib/feed-adapter";
 import { CompareMatrixView } from "@/features/story-clusters/compare-matrix-view";
 import { loadFeedClusterConsensus } from "@/server/consensus/functions";
@@ -24,9 +23,7 @@ export const Route = createFileRoute("/compare/$clusterId")({
       };
     }
 
-    const cluster = clusterById(params.clusterId);
-    if (!cluster) throw notFound();
-    return { cluster, usingLiveFeed: false };
+    throw notFound();
   },
   component: CompareRoute,
   notFoundComponent: () => <div className="p-12 text-center">Cluster not found</div>,

@@ -13,6 +13,7 @@ import { QuotaBanner, type QuotaInfo } from "./quota-banner";
 type CompletedAnalysis = {
   report: ReturnType<typeof analysisReportToManualReport>;
   platformReport: AnalysisReport;
+  explainability?: unknown;
   finalIntelligence?: FinalIntelligenceSummary;
   requestId: string;
 };
@@ -39,6 +40,7 @@ function snapshotFromResponse(
     finalIntelligence:
       (result.finalIntelligence as FinalIntelligenceSummary | undefined) ??
       snap?.finalIntelligence,
+    explainability: result.explainability,
   };
 }
 
@@ -95,6 +97,7 @@ export function UserAnalysisForm({
         report?: ReturnType<typeof analysisReportToManualReport>;
         platformReport?: AnalysisReport;
         finalIntelligence?: FinalIntelligenceSummary;
+        explainability?: unknown;
         analysisSnapshot?: {
           report: AnalysisReport;
           reliability?: unknown;
@@ -158,6 +161,7 @@ export function UserAnalysisForm({
       <ReportView
         report={completed.report}
         platformReport={completed.platformReport}
+        explainability={completed.explainability}
         finalIntelligence={completed.finalIntelligence}
       />
     );

@@ -106,11 +106,18 @@ function FeedArticleAnalysisRoute() {
         return;
       }
 
-      if (res.status === "completed" && res.report) {
+      if (res.status === "completed") {
+        const platformReport = res.platformReport;
+        const report =
+          res.report ?? (platformReport ? analysisReportToManualReport(platformReport) : null);
+        if (!report) {
+          setAnalysisError("Analysis completed but no report was returned.");
+          return;
+        }
         setCompleted({
           clusterId,
-          report: res.report,
-          platformReport: res.platformReport,
+          report,
+          platformReport,
           explainability: res.explainability,
           articlePageScores: res.articlePageScores,
           storyReport: res.storyReport,

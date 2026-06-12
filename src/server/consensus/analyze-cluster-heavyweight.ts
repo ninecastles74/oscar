@@ -61,7 +61,9 @@ export async function analyzeArticleHeavyweight(
   if (existing && !options?.force && !bundleNeedsAiReanalysis(existing)) return existing;
 
   const ctx = articleToPipeline(article);
+  console.log("[analyzeArticleHeavyweight] pipeline started", key);
   let bundle = await runVerificationPipeline(ctx);
+  console.log("[analyzeArticleHeavyweight] multi-model enrichment", key);
   bundle = await enrichVerificationWithMultiModel(bundle, "scheduled");
   assertLiveAnalysisReport(bundle.report, bundle.stages);
   const { report, results } = bundle;

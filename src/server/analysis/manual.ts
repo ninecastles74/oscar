@@ -234,10 +234,12 @@ async function runManualAnalysisPipeline(
     request.progress = 50;
     await syncManualRequest(request);
 
+    console.log("[executeManualAnalysis] running verification pipeline", requestId);
     let bundle = await runVerificationPipeline(pipelineArticle);
     request.progress = 70;
     await syncManualRequest(request);
 
+    console.log("[executeManualAnalysis] running multi-model enrichment", requestId);
     bundle = await enrichVerificationWithMultiModel(bundle, "user");
     assertLiveAnalysisReport(bundle.report, bundle.stages);
     const { report, results } = bundle;

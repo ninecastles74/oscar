@@ -6,6 +6,7 @@ import { loadManualReliability } from "../analysis/manual-persist";
 import { analyzeArticleHeavyweight, bundleNeedsAiReanalysis } from "../consensus/analyze-cluster-heavyweight";
 import { buildArticlePageScores } from "../consensus/article-page-scores";
 import { getStoryConsensus } from "../consensus/store";
+import { isGoogleAiConfigured } from "../ai/google-api-key";
 import { ensureWorkerEnvFromPlatform } from "../env/ensure-worker-env";
 import {
   getArticleBundleHydrated,
@@ -15,7 +16,7 @@ import {
   persistFeedToKv,
   ensureFeedHydratedFromKv,
 } from "../news/feed-store";
-import { isFeedKvConfigured, runInWorkerBackground } from "../news/worker-env";
+import { isFeedKvConfigured } from "../news/worker-env";
 import { stableArticleId } from "../news/utils/text";
 import { computeAndStoreReliabilityScores, getReliabilityBundleByArticleId } from "../reliability/engine";
 import { buildFullExplainabilityBundle } from "../reliability/explainability/build-explainability";
@@ -178,29 +179,7 @@ export async function handleAnalyzeText(request: Request): Promise<Response> {
     });
   }
 
-  const result = await runGatedUserAnalysis(parsed.data);
-  if ("error" in result && result.error) {
-    return jsonError(result.error.message, {
-      status: result.error.statusCode ?? 400,
-      code: result.error.code,
-      extra: result.error.quota ? { quota: result.error.quota } : undefined,
-    });
-  }
-
-  const platformReport = result.analysisSnapshot?.report;
-  return jsonOk({
-    requestId: result.requestId,
-    submissionId: result.submissionId,
-    status: result.status,
-    quota: result.quota,
-    kvConfigured: result.kvConfigured,
-    analysisSnapshot: result.analysisSnapshot,
-    platformReport,
-    report: platformReport ? analysisReportToManualReport(platformReport) : undefined,
-    finalIntelligence: result.analysisSnapshot?.finalIntelligence,
-    failedMessage: result.failedMessage,
-    envWarning: result.envWarning,
-  });
+  return handleManualAnalysisResult(await runGatedUserAnalysis(parsed.data));
 }
 
 export async function handleAnalyzeUrl(request: Request): Promise<Response> {
@@ -217,8 +196,14 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     });
   }
 
-  const result = await runGatedUserAnalysis(parsed.data);
+  return handleManualAnalysisResult(await runGatedUserAnalysis(parsed.data));
+}
+
+function handleManualAnalysisResult(
+  result: Awaited<ReturnType<typeof runGatedUserAnalysis>>,
+): Response {
   if ("error" in result && result.error) {
+    console.log("[api/analyze] gate error:", result.error.code, result.error.message);
     return jsonError(result.error.message, {
       status: result.error.statusCode ?? 400,
       code: result.error.code,
@@ -227,6 +212,47 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
   }
 
   const platformReport = result.analysisSnapshot?.report;
+  let explainability;
+  if (platformReport && result.analysisSnapshot?.reliability) {
+    try {
+      explainability = buildFullExplainabilityBundle(
+        platformReport,
+        result.analysisSnapshot.reliability,
+        getVerificationSnapshot(result.requestId)?.results,
+      );
+    } catch (err) {
+      console.warn(
+        "[api/analyze] explainability skipped:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  if (result.status === "failed") {
+    console.error("[api/analyze] pipeline failed:", result.failedMessage);
+    return jsonError(result.failedMessage ?? "Analysis failed", {
+      status: 500,
+      code: "ANALYSIS_FAILED",
+      details: result.failedMessage,
+      extra: { requestId: result.requestId, status: result.status },
+    });
+  }
+
+  if (result.status === "completed" && !platformReport) {
+    return jsonError("Analysis completed but report could not be loaded", {
+      status: 500,
+      code: "LOAD_FAILED",
+      details: "Enable FEED_KV for cross-request persistence or retry.",
+      extra: { requestId: result.requestId },
+    });
+  }
+
+  console.log("[api/analyze] pipeline completed", {
+    requestId: result.requestId,
+    status: result.status,
+    claims: platformReport?.claims?.length ?? 0,
+  });
+
   return jsonOk({
     requestId: result.requestId,
     submissionId: result.submissionId,
@@ -236,6 +262,7 @@ export async function handleAnalyzeUrl(request: Request): Promise<Response> {
     analysisSnapshot: result.analysisSnapshot,
     platformReport,
     report: platformReport ? analysisReportToManualReport(platformReport) : undefined,
+    explainability,
     finalIntelligence: result.analysisSnapshot?.finalIntelligence,
     failedMessage: result.failedMessage,
     envWarning: result.envWarning,
@@ -257,15 +284,23 @@ export async function handleAnalyzeArticle(request: Request): Promise<Response> 
     });
   }
 
-  const { articleId, clusterId, sync } = parsed.data;
+  const { articleId, clusterId } = parsed.data;
   console.log("[api/analyze/article] articleId parsed:", articleId, "clusterId:", clusterId ?? "(search)");
+  console.log("[api/analyze/article] gemini configured:", isGoogleAiConfigured());
+
+  if (!isGoogleAiConfigured()) {
+    return jsonError("Live analysis requires GEMINI_API_KEY on the oscar Worker", {
+      status: 503,
+      code: "LIVE_AI_REQUIRED",
+    });
+  }
 
   const resolved = await resolveFeedArticle(articleId, clusterId);
   if (!resolved) {
     return jsonError("Article not found in feed", {
       status: 404,
       code: "NOT_FOUND",
-      details: `No article matching id ${articleId}`,
+      details: `No article matching id ${articleId}. Visit /stories to bootstrap the feed first.`,
     });
   }
 
@@ -294,36 +329,29 @@ export async function handleAnalyzeArticle(request: Request): Promise<Response> 
     }
   };
 
-  const wantSync = sync === true || !isFeedKvConfigured();
-
-  if (wantSync) {
-    try {
-      await runAnalysis();
-      const payload = await buildArticleAnalysisResponse(resolved.clusterId, article, key);
-      if (!payload) {
-        return jsonError("Analysis finished but results could not be loaded", {
-          status: 500,
-          code: "LOAD_FAILED",
-        });
-      }
-      return jsonOk({ status: "completed" as const, ...payload });
-    } catch (err) {
-      return jsonError("Article analysis failed", {
+  try {
+    await runAnalysis();
+    const payload = await buildArticleAnalysisResponse(resolved.clusterId, article, key);
+    if (!payload) {
+      return jsonError("Analysis finished but results could not be loaded", {
         status: 500,
-        code: "ANALYSIS_FAILED",
-        details: err instanceof Error ? err.message : String(err),
+        code: "LOAD_FAILED",
+        details: isFeedKvConfigured()
+          ? undefined
+          : "FEED_KV is not bound — analysis may not persist across requests.",
       });
     }
+    console.log("[api/analyze/article] returning completed analysis for", key);
+    return jsonOk({ status: "completed" as const, ...payload });
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    console.error("[api/analyze/article] failed for", key, details);
+    return jsonError("Article analysis failed", {
+      status: 500,
+      code: "ANALYSIS_FAILED",
+      details,
+    });
   }
-
-  runInWorkerBackground(runAnalysis().catch((err) => console.error("[api/analyze/article] background failed:", err)));
-
-  return jsonOk({
-    status: "processing" as const,
-    clusterId: resolved.clusterId,
-    articleId: key,
-    message: "Running live Oscar analysis for this article…",
-  });
 }
 
 export async function handleGetManualAnalysis(requestId: string): Promise<Response> {

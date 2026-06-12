@@ -18,9 +18,20 @@ export async function persistVerificationToSupabase(
 ): Promise<void> {
   if (!isSupabaseConfigured()) return;
 
-  await persistAnalysisToSupabase(report, results, article);
-
-  if (scores) {
-    await persistScoresToSupabase(scores.result, scores.ctx);
+  try {
+    await persistAnalysisToSupabase(report, results, article);
+    if (scores) {
+      await persistScoresToSupabase(scores.result, scores.ctx);
+    }
+    console.log("[supabase] analysis persisted", {
+      reportId: report.id,
+      articleId: article.submissionId,
+      claims: report.claims.length,
+    });
+  } catch (err) {
+    console.error(
+      "[supabase] persist verification failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }

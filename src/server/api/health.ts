@@ -43,14 +43,35 @@ export async function buildHealthPayload() {
     console.log("[api/health] Supabase ping:", ping.ok ? "ok" : ping.message);
   }
 
+  const newsIngestReady =
+    getServerEnv("RSS_USE_DEFAULT_REGISTRY") === "true" ||
+    Boolean(getServerEnv("NEWS_API_KEY") || getServerEnv("GNEWS_API_KEY") || getServerEnv("GUARDIAN_API_KEY"));
+
   return {
     status: "ok" as const,
     timestamp: new Date().toISOString(),
     geminiConfigured: isGoogleAiConfigured(),
+    analysisReady: isGoogleAiConfigured(),
+    feedReady: kv.configured && (feedMeta.top100Count ?? 0) > 0,
     aiKeysDetected: listApiKeyEnvNames(),
     feedKv: kv,
     feedMeta,
     supabase,
     envPresent,
+    newsIngestReady,
+    recommendations: [
+      !isGoogleAiConfigured()
+        ? "Set GEMINI_API_KEY secret on the oscar Worker (required for Ask Oscar and article analysis)."
+        : null,
+      !kv.configured
+        ? "Create FEED_KV namespace and add binding in wrangler.jsonc (required for Top 100 persistence)."
+        : null,
+      (feedMeta.top100Count ?? 0) === 0
+        ? "Visit /stories after deploy to bootstrap RSS ingest, or wait for the 8h cron."
+        : null,
+      !supabase.configured
+        ? "Optional: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to persist analyses to Supabase."
+        : null,
+    ].filter(Boolean),
   };
 }
