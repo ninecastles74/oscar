@@ -86,6 +86,12 @@ export function Top100View({
                 ))}
               </ul>
             ) : null}
+            {diagnostics?.feedKvBound === false ? (
+              <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                FEED_KV is not bound — ingest cannot persist between requests. Create a KV namespace,
+                add it to wrangler.jsonc, and redeploy (required for a reliable Top 100 feed).
+              </p>
+            ) : null}
             {diagnostics?.recommendations && diagnostics.recommendations.length > 0 ? (
               <ul className="mt-2 list-inside list-disc text-xs text-muted-foreground">
                 {diagnostics.recommendations.map((line) => (

@@ -79,7 +79,8 @@ function parsePublisherFeeds(json: string | undefined): PublisherFeedConfig[] {
 function parseEnabledProviders(raw: string | undefined): ApiProviderId[] {
   const all: ApiProviderId[] = ["newsapi", "gnews", "guardian", "rss", "publishers"];
   const list = parseCsv(raw) as ApiProviderId[];
-  if (list.length === 0) return all;
+  // Default to RSS-only (free, no API keys). Avoid enabling publishers without PUBLISHER_FEEDS_JSON.
+  if (list.length === 0) return ["rss"];
   return list.filter((p) => all.includes(p));
 }
 

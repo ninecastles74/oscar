@@ -88,18 +88,32 @@ export const getTop100Feed = createServerFn({ method: "GET" }).handler(async () 
     let bootstrap: Awaited<ReturnType<typeof bootstrapFeedIfEmpty>> | undefined;
     let clusters = await getTop100Clusters();
     if (clusters.length === 0) {
-      // Never block navigation on a full RSS ingest — always bootstrap in the background.
-      runInWorkerBackground(
+      const runBootstrap = () =>
         bootstrapFeedIfEmpty()
-          .then((result) => console.log("[feed] background bootstrap", JSON.stringify(result)))
-          .catch((err) =>
+          .then((result) => {
+            console.log("[feed] bootstrap", JSON.stringify(result));
+            return result;
+          })
+          .catch((err) => {
             console.error(
-              "[feed] background bootstrap failed:",
+              "[feed] bootstrap failed:",
               err instanceof Error ? err.message : err,
-            ),
-          ),
-      );
-      bootstrap = { ran: false, reason: "bootstrap_scheduled" };
+            );
+            return {
+              ran: false,
+              reason: err instanceof Error ? err.message : "bootstrap_failed",
+            } satisfies Awaited<ReturnType<typeof bootstrapFeedIfEmpty>>;
+          });
+
+      if (isFeedKvConfigured()) {
+        // With KV, persist survives across isolates — bootstrap in the background.
+        runInWorkerBackground(runBootstrap());
+        bootstrap = { ran: false, reason: "bootstrap_scheduled" };
+      } else {
+        // Without KV, await ingest in this request so the first page load can show stories.
+        bootstrap = await runBootstrap();
+        clusters = await getTop100Clusters();
+      }
     }
     const meta = getFeedMeta();
     return {
@@ -158,6 +172,9 @@ export const getNewsFeedDiagnostics = createServerFn({ method: "GET" }).handler(
       .map((p) => {
         if (p === "rss") {
           return "rss: set RSS_USE_DEFAULT_REGISTRY=true (text var) and/or add API keys for newsapi/gnews/guardian";
+        }
+        if (p === "publishers") {
+          return "publishers: set PUBLISHER_FEEDS_JSON (text var) or remove publishers from NEWS_INGEST_ENABLED_PROVIDERS";
         }
         return `${p}: add ${p === "newsapi" ? "NEWS_API_KEY" : p === "gnews" ? "GNEWS_API_KEY" : p === "guardian" ? "GUARDIAN_API_KEY" : p} secret in Cloudflare`;
       }),
